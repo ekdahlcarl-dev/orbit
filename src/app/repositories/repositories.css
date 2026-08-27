@@ -1,0 +1,28 @@
+.repositories { max-width: 1000px; margin: auto; padding: 40px 24px 80px; }
+.repositories header { display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between; align-items: center; }
+.repositories a { color: #a7c6ff; }
+.repositories header span { font-size: 12px; letter-spacing: 2px; color: #b5bedb; }
+.repositories h1 { font-size: clamp(30px, 6vw, 48px); margin-bottom: 16px; }
+.repositories .intro { max-width: 700px; font-size: 18px; line-height: 1.6; color: #b5bedb; }
+.repositories .panel { background: #111831; border: 1px solid #2b355a; border-radius: 16px; padding: 24px; margin-top: 24px; }
+.repositories h2 { margin-top: 0; }
+.repositories p { line-height: 1.6; }
+.repositories fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 20px; }
+.repositories label { display: grid; gap: 8px; }
+.repositories input, .repositories select, .repositories button { font: inherit; border-radius: 8px; padding: 12px; box-sizing: border-box; }
+.repositories input, .repositories select { background: #0b1020; color: #f5f7ff; border: 1px solid #677294; width: 100%; min-width: 0; }
+.repositories button { background: #afc9ff; color: #102040; font-weight: 600; border: 0; cursor: pointer; justify-self: start; }
+.repositories button.secondary { background: transparent; color: #afc9ff; border: 1px solid #677294; }
+.repositories button:disabled { opacity: .55; cursor: default; }
+.repositories .checkbox { display: flex; align-items: center; }
+.repositories input[type=checkbox] { width: 20px; height: 20px; }
+.repositories :focus-visible { outline: 3px solid #9ac7ff; outline-offset: 3px; }
+.repositories .muted, .repositories small { color: #b5bedb; }
+.repositories .error, .repositories .success { padding: 16px; border-radius: 8px; overflow-wrap: anywhere; }
+.repositories .error { background: #482130; color: #ffcad5; }
+.repositories .success { background: #163d35; color: #b5f2d8; }
+.repositories .table-wrap { overflow-x: auto; }
+.repositories table { width: 100%; border-collapse: collapse; text-align: left; }
+.repositories th, .repositories td { padding: 12px 8px; border-bottom: 1px solid #2b355a; overflow-wrap: anywhere; }
+.repositories li { margin-bottom: 16px; }
+@media (max-width: 480px) { .repositories { padding: 24px 16px; } .repositories .panel { padding: 18px; } }

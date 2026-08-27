@@ -51,3 +51,6 @@ GitHub Actions executes the same gates against PostgreSQL for every ORBIT pull r
 ## Hosted development
 
 The repository is Codespaces/devcontainer-enabled. From a hosted Codespace, enter `orbit/` and use the same commands above. The app listens on port 3000, which Codespaces can forward for browser testing.
+# GitHub repository onboarding (ORB-3)
+
+Open `/repositories` to configure authorized GitHub repositories. See [GITHUB_SETUP.md](GITHUB_SETUP.md) for App permissions, server secrets, operator access, webhook setup and verification. Build dispatch and scheduling remain ORB-4.
