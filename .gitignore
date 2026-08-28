@@ -1,0 +1,16 @@
+node_modules/
+.next/
+next-env.d.ts
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+certs/
+secrets/
+*.log
+coverage/
+*.tsbuildinfo
+.orbit-storage/
