@@ -9,6 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  devcontainer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify Codespaces toolchain
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: |
+            command -v node
+            command -v npm
+            command -v docker
+            node --version
+            npm --version
+            docker --version
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 15
