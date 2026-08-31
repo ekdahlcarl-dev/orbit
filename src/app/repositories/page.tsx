@@ -30,7 +30,7 @@ export default function RepositoriesPage() {
 
   async function api<T>(path: string, body?: unknown, auth = authorization): Promise<T> {
     const response = await fetch(`/api/github/${path}`, {
-      method: body ? "POST" : "GET", cache: "no-store", credentials: "omit",
+      method: body ? "POST" : "GET", cache: "no-store", credentials: "same-origin",
       headers: { Authorization: auth, "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
     });
