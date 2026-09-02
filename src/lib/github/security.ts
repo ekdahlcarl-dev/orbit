@@ -41,8 +41,27 @@ export function requireOperator(request: Request, env: EnvironmentInput = proces
   if (!secretEquals(request.headers.get("authorization") ?? "", expected)) {
     throw new IntegrationError(401, "Operator credentials required");
   }
+
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) throw new IntegrationError(403, "Cross-origin requests are not allowed");
+  const url = new URL(request.url);
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+
+  console.log("ORIGIN DEBUG", {
+    origin,
+    host: request.headers.get("host"),
+    forwardedHost,
+    forwardedProto,
+    requestUrl: request.url,
+  });
+
+  const expectedOrigin = forwardedHost
+    ? `${forwardedProto ?? url.protocol.replace(":", "")}://${forwardedHost}`
+    : url.origin;
+
+  if (origin && origin !== expectedOrigin) {
+    throw new IntegrationError(403, "Cross-origin requests are not allowed");
+  }
   return user;
 }
 
