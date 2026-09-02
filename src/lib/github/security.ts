@@ -41,8 +41,29 @@ export function requireOperator(request: Request, env: EnvironmentInput = proces
   if (!secretEquals(request.headers.get("authorization") ?? "", expected)) {
     throw new IntegrationError(401, "Operator credentials required");
   }
+
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) throw new IntegrationError(403, "Cross-origin requests are not allowed");
+  if (origin) {
+    const host = request.headers.get("host");
+    const forwardedHost = request.headers.get("x-forwarded-host");
+    const forwardedProto = request.headers.get("x-forwarded-proto");
+    const acceptedOrigins = new Set<string>([new URL(request.url).origin]);
+
+    // Reverse proxies such as GitHub Codespaces may rewrite Origin/Host to the
+    // internal localhost endpoint while retaining the public endpoint in
+    // X-Forwarded-* headers. Accept either endpoint, but no unrelated origin.
+    if (host) {
+      acceptedOrigins.add(`http://${host}`);
+      acceptedOrigins.add(`https://${host}`);
+    }
+    if (forwardedHost) {
+      acceptedOrigins.add(`${forwardedProto ?? "https"}://${forwardedHost}`);
+    }
+
+    if (!acceptedOrigins.has(origin)) {
+      throw new IntegrationError(403, "Cross-origin requests are not allowed");
+    }
+  }
   return user;
 }
 
