@@ -1,11 +1,14 @@
 import { getDb } from "../lib/db";
 import { logger } from "../lib/logger";
 import { processWebhook } from "../lib/github/webhooks";
+import { GitHubClient } from "../lib/github/client";
+import { enqueueDueSchedules, processBuildTrigger } from "../lib/builds";
 
-export async function runWorkerIteration(db = getDb()): Promise<void> {
+export async function runWorkerIteration(db = getDb(), github = new GitHubClient()): Promise<void> {
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+    await enqueueDueSchedules(client);
     const result = await client.query(`
       SELECT id, job_type, payload, attempts
       FROM job_queue
@@ -27,11 +30,12 @@ export async function runWorkerIteration(db = getDb()): Promise<void> {
     try {
       if (job.job_type === "github.webhook") {
         await processWebhook(client, job.payload.deliveryId);
-        await client.query("UPDATE job_queue SET status='succeeded', updated_at=now() WHERE id=$1", [job.id]);
+      } else if (job.job_type === "build.trigger") {
+        await processBuildTrigger(client, github, job.payload);
       } else {
-        // Never report unimplemented work as successful.
-        await client.query("UPDATE job_queue SET status='failed', updated_at=now() WHERE id=$1", [job.id]);
+        throw new Error(`Unsupported job type: ${job.job_type}`);
       }
+      await client.query("UPDATE job_queue SET status='succeeded', updated_at=now() WHERE id=$1", [job.id]);
     } catch {
       await client.query("ROLLBACK TO SAVEPOINT process_job");
       await client.query(`UPDATE job_queue SET status=$2, available_at=now()+interval '30 seconds', updated_at=now()
