@@ -47,7 +47,7 @@ The worker keeps bounded retries: failed jobs are retried after 30 seconds up to
 
 ## Verification
 
-Run `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build`. ORBIT CI also starts PostgreSQL, applies every migration, verifies migration replay, and runs the production build.
+Run `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build`. ORBIT CI also starts PostgreSQL, applies every migration, verifies migration replay, and runs the production build. Merge ORB-4 only when the latest-head CI run is green.
 
 Live acceptance requires a GitHub App configured with Actions write and a workflow containing `workflow_dispatch`: save an onboarded repository, enable builds, trigger **Build now**, observe the GitHub workflow, then confirm ORBIT history transitions through queued/running to a terminal state. Repeat a webhook delivery to verify no duplicate logical run is created.
 
