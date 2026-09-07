@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const cards = [
-  ["Build orchestration", "Connect repositories now. Build scheduling arrives in ORB-4."],
+  ["Build orchestration", "Run manual, scheduled and push-triggered builds with auditable run history."],
   ["Confidence engine", "Levels 0–3 are implemented in ORB-6/7/8/9."],
   ["Quality intelligence", "Risk analytics and AI recommendations arrive in ORB-11/12/13."],
 ];
@@ -14,7 +14,10 @@ export default function Home() {
       <p style={{ maxWidth: 720, fontSize: 20, lineHeight: 1.6, opacity: 0.82 }}>
         ORBIT connects builds, immutable binaries, test evidence and confidence levels into one auditable control plane.
       </p>
-      <Link href="/repositories" style={{ color: "#afc9ff", display: "inline-block", marginTop: 16 }}>Configure GitHub repositories →</Link>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 16 }}>
+        <Link href="/repositories" style={{ color: "#afc9ff" }}>Configure GitHub repositories →</Link>
+        <Link href="/builds" style={{ color: "#afc9ff" }}>Open build control →</Link>
+      </div>
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16, marginTop: 48 }}>
         {cards.map(([title, text]) => (
           <article key={title} style={{ border: "1px solid #2b355a", borderRadius: 16, padding: 24, background: "#111831" }}>

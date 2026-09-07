@@ -8,7 +8,7 @@ export interface Installation { id: number; account: { login: string }; suspende
 export class GitHubClient {
   constructor(private transport: typeof fetch = fetch, private env: EnvironmentInput = process.env) {}
 
-  private async request<T>(path: string, token: string, body?: object): Promise<T> {
+  private async response(path: string, token: string, body?: object): Promise<Response> {
     const response = await this.transport(`https://api.github.com${path}`, {
       method: body ? "POST" : "GET",
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
@@ -16,12 +16,15 @@ export class GitHubClient {
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) {
-      // Never return GitHub response bodies, tokens, or keys to logs/UI.
       const status = [403, 404].includes(response.status) ? response.status : 502;
       throw new IntegrationError(status, response.status === 429 || response.headers.get("x-ratelimit-remaining") === "0"
         ? "GitHub rate limit reached; retry later" : "GitHub request failed; check installation access and permissions");
     }
-    return response.json() as Promise<T>;
+    return response;
+  }
+
+  private async request<T>(path: string, token: string, body?: object): Promise<T> {
+    return (await this.response(path, token, body)).json() as Promise<T>;
   }
 
   private async pages<T>(path: string, token: string, key?: string): Promise<T[]> {
@@ -45,9 +48,9 @@ export class GitHubClient {
   private async token(installationId: number) {
     requireInstallation(installationId, this.env);
     const result = await this.request<{ token: string }>(`/app/installations/${installationId}/access_tokens`, appJwt(this.env), {
-      permissions: { contents: "read", actions: "read", metadata: "read" },
+      permissions: { contents: "read", actions: "write", metadata: "read" },
     });
-    return result.token; // Short-lived, request-local only; never persisted.
+    return result.token;
   }
 
   async repositories(installationId: number): Promise<Repository[]> {
@@ -58,7 +61,6 @@ export class GitHubClient {
 
   async repositoryContext(installationId: number, repositoryId: number) {
     const token = await this.token(installationId);
-    // Explicit membership check: installation tokens can also read some public repos.
     const repositories = await this.pages<Repository>("/installation/repositories", token, "repositories");
     const repository = repositories.find(item => item.id === repositoryId);
     if (!repository) throw new IntegrationError(403, "Repository is not authorized for this installation");
@@ -86,9 +88,14 @@ export class GitHubClient {
       this.request<Workflow>(`${root}/actions/workflows/${workflowId}`, token),
     ]);
     if (workflow.state !== "active" || !workflow.path.startsWith(".github/workflows/")) throw new IntegrationError(400, "Choose an active workflow");
-    // Ensure the selected workflow exists on the chosen ref, not only the default branch.
     const file = await this.request<{ type: string }>(`${root}/contents/${workflow.path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(`refs/${ref}`)}`, token);
     if (file.type !== "file") throw new IntegrationError(400, "Workflow does not exist on the selected ref");
     return { repository, workflow, refSha: gitRef.object.sha };
+  }
+
+  async dispatch(installationId: number, repositoryId: number, workflowId: number, ref: string) {
+    const { token, root } = await this.repositoryContext(installationId, repositoryId);
+    const refName = ref.replace(/^(heads|tags)\//, "");
+    await this.response(`${root}/actions/workflows/${workflowId}/dispatches`, token, { ref: refName });
   }
 }

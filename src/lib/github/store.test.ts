@@ -17,6 +17,7 @@ test("PostgreSQL: config audit, rollback, webhook deduplication, queue and revoc
   try {
     await db.query(await readFile("db/migrations/001_init.sql", "utf8"));
     await db.query(await readFile("db/migrations/002_github_onboarding.sql", "utf8"));
+    await db.query(await readFile("db/migrations/003_build_orchestration.sql", "utf8"));
     class StubGitHub extends GitHubClient {
       override async validate() { return { repository: { id: 5, name: "repo", full_name: "org/repo", default_branch: "main", archived: false }, workflow: { id: 7, name: "Build", path: ".github/workflows/build.yml", state: "active" }, refSha: "abc" }; }
     }
@@ -31,7 +32,6 @@ test("PostgreSQL: config audit, rollback, webhook deduplication, queue and revoc
     assert.equal((await listConfigurations(db, 10, [])).length, 0);
     assert.equal((await listConfigurations(db, 20, [5])).length, 0);
     assert.equal((await listConfigurations(db, 10, [5])).length, 1);
-    // A failed audit write must also roll back the configuration update.
     await assert.rejects(() => saveConfiguration(db, new StubGitHub(), { ...input, ref: "heads/other" }, null as unknown as string));
     assert.equal((await listConfigurations(db, 10, [5]))[0].default_ref, "heads/main");
 
