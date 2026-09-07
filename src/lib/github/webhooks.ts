@@ -3,8 +3,8 @@ import { z } from "zod";
 import type { Pool, PoolClient } from "pg";
 import { idSchema, IntegrationError, readLimitedBody, requireInstallation, verifySignature } from "./security";
 import { transaction } from "./store";
+import { queuePushBuild, syncWorkflowRun } from "../builds";
 
-// Keep only normalized metadata required by ORB-3/4; discard arbitrary raw content.
 const payloadSchema = z.object({
   action: z.string().max(100).optional(),
   installation: z.object({ id: idSchema }),
@@ -22,7 +22,6 @@ export async function receiveWebhook(db: Pool, request: Request, env: Environmen
   if (!deliveryId || !/^[a-zA-Z0-9-]{1,100}$/.test(deliveryId)) throw new IntegrationError(400, "Invalid delivery ID");
   const event = request.headers.get("x-github-event") ?? "";
   if (!["ping", "installation", "installation_repositories", "push", "workflow_run"].includes(event)) return { ignored: true };
-  // App-level setup pings have no installation identity. Signature still required.
   if (event === "ping") return { ping: true };
   const data = payloadSchema.parse(JSON.parse(body.toString("utf8")));
   requireInstallation(data.installation.id, env);
@@ -42,7 +41,6 @@ export async function receiveWebhook(db: Pool, request: Request, env: Environmen
   });
 }
 
-// Runs inside the worker's claim transaction; crash rolls back both processing and claim.
 export async function processWebhook(client: PoolClient, deliveryId: string) {
   const result = await client.query("SELECT * FROM github_deliveries WHERE delivery_id=$1 FOR UPDATE", [deliveryId]);
   const delivery = result.rows[0];
@@ -55,14 +53,19 @@ export async function processWebhook(client: PoolClient, deliveryId: string) {
     const repos = await client.query(`SELECT * FROM github_repositories WHERE installation_id=$1
       AND ($2::boolean OR repository_id=ANY($3::bigint[])) FOR UPDATE`, [data.installation.id, revokeInstallation, removed]);
     for (const before of repos.rows) {
-      const updated = await client.query(`UPDATE github_repositories SET enabled=false, access_status='revoked', updated_at=now()
+      const updated = await client.query(`UPDATE github_repositories SET enabled=false, access_status='revoked', next_scheduled_at=NULL, updated_at=now()
         WHERE repository_id=$1 RETURNING *`, [before.repository_id]);
       await client.query(`INSERT INTO github_audit(actor,action,installation_id,repository_id,before_value,after_value)
         VALUES ('github.webhook','repository.access_revoked',$1,$2,$3,$4)`, [data.installation.id, before.repository_id, before, updated.rows[0]]);
     }
   }
+  if (delivery.event === "push" && data.repository) {
+    await queuePushBuild(client, data.installation.id, data.repository.id, deliveryId, data.ref);
+  }
+  if (delivery.event === "workflow_run" && data.repository && data.workflow_run) {
+    await syncWorkflowRun(client, data.installation.id, data.repository.id, data.workflow_run);
+  }
   await client.query(`INSERT INTO github_audit(actor,action,installation_id,repository_id,after_value)
     VALUES ('github.webhook',$1,$2,$3,$4)`, [`webhook.${delivery.event}`, data.installation.id, data.repository?.id ?? null, { deliveryId, action: data.action }]);
-  // ORB-4 consumes persisted push/workflow_run metadata; no build/confidence claims here.
   await client.query("UPDATE github_deliveries SET processed_at=now() WHERE delivery_id=$1", [deliveryId]);
 }
