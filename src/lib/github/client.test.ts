@@ -18,7 +18,7 @@ test("repository membership is checked even when GitHub could read a public repo
   const github = new GitHubClient(mockTransport((url, init) => {
     paths.push(url.pathname);
     if (url.pathname.endsWith("access_tokens")) {
-      assert.deepEqual(JSON.parse(String(init?.body)).permissions, { contents: "read", actions: "read", metadata: "read" });
+      assert.deepEqual(JSON.parse(String(init?.body)).permissions, { contents: "read", actions: "write", metadata: "read" });
       return { token: "ephemeral" };
     }
     return { repositories: [repo] };
@@ -59,4 +59,16 @@ test("validation verifies exact ref and workflow file; errors never leak upstrea
   await assert.rejects(() => github.validate(10, 5, "../main", 7), /Choose a branch/);
   const bad = new GitHubClient(mockTransport(() => new Response("secret upstream data", { status: 500 })), env);
   await assert.rejects(() => bad.repositories(10), error => error instanceof Error && !error.message.includes("secret upstream data"));
+});
+
+test("workflow dispatch uses the configured ref name", async () => {
+  let dispatchBody: unknown;
+  const github = new GitHubClient(mockTransport((url, init) => {
+    if (url.pathname.endsWith("access_tokens")) return { token: "secret-token" };
+    if (url.pathname === "/installation/repositories") return { repositories: [repo] };
+    if (url.pathname.endsWith("/dispatches")) { dispatchBody = JSON.parse(String(init?.body)); return new Response(null, { status: 204 }); }
+    return {};
+  }), env);
+  await github.dispatch(10, 5, 7, "heads/main");
+  assert.deepEqual(dispatchBody, { ref: "main" });
 });
