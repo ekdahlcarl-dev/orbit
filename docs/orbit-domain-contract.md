@@ -63,6 +63,30 @@ The source evidence must have `evidence_type = static_analysis` and belong to th
 
 Provider-specific payloads implement `StaticAnalysisAdapter` in `src/lib/static-analysis.ts`. ORB-6 ships the first adapter for SonarQube/SonarCloud. Future SARIF or GitHub code-scanning adapters normalize into the same `StaticAnalysisResult` contract.
 
+## Level 2 — component/module tests
+
+Level 2 component evidence is normalized per exact artifact. A suite configuration maps `(repository, componentKey, suiteKey)` to a deterministic Level 2 confidence requirement key: `component:<componentKey>:suite:<suiteKey>`.
+
+Each ingested suite result stores:
+
+- exact artifact, BuildRun, repository and commit lineage,
+- source `evidence` row with `evidence_type = test`,
+- component and suite identity,
+- normalized pending/running/passed/failed/unstable state,
+- per-suite test totals,
+- coverage metrics and deltas when provided,
+- arbitrary trend metadata,
+- explicit flaky-test identities and count,
+- observation timestamp used by freshness evaluation.
+
+Component evidence must reference the exact artifact, not only its BuildRun. An `unstable` suite is preserved as such in the component-test result but is submitted to the deterministic confidence engine as `failed`; flaky tests therefore remain visible without silently allowing Level 2 promotion.
+
+### Component-test API
+
+- `POST /api/component-tests/configure` — configure a required/optional component suite and mirror it into the Level 2 confidence requirements.
+- `POST /api/component-tests/ingest` — normalize one component/module suite, persist coverage/trend/flaky metadata, and immediately recalculate confidence.
+- `GET /api/component-tests/results?artifactId=<id>` — inspect normalized component/module evidence for an artifact.
+
 ## Confidence API
 
 - `POST /api/confidence/configure` — configure a mandatory/optional Level 2 or 3 evidence requirement, optionally with maximum evidence age.
