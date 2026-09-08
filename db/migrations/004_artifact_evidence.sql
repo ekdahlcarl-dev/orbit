@@ -27,7 +27,7 @@ CREATE TABLE evidence (
   summary jsonb NOT NULL,
   provenance jsonb NOT NULL,
   ingested_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (source_digest, build_run_id, artifact_id)
+  CONSTRAINT evidence_source_identity UNIQUE NULLS NOT DISTINCT (source_digest, build_run_id, artifact_id)
 );
 CREATE INDEX evidence_artifact ON evidence (artifact_id, ingested_at DESC);
 CREATE INDEX evidence_build ON evidence (build_run_id, ingested_at DESC);
