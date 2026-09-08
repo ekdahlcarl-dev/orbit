@@ -1,22 +1,23 @@
 import Link from "next/link";
 
 const cards = [
+  ["Delivery dashboard", "See build status, immutable binaries, confidence Levels 0–3, blocking stages and source evidence."],
   ["Build orchestration", "Run manual, scheduled and push-triggered builds with auditable run history."],
-  ["Confidence engine", "Levels 0–3 are implemented in ORB-6/7/8/9."],
   ["Quality intelligence", "Risk analytics and AI recommendations arrive in ORB-11/12/13."],
 ];
 
 export default function Home() {
   return (
     <main style={{ maxWidth: 1000, margin: "0 auto", padding: "72px 24px" }}>
-      <p style={{ letterSpacing: 3, opacity: 0.7 }}>ORBIT / FOUNDATION</p>
+      <p style={{ letterSpacing: 3, opacity: 0.7 }}>ORBIT / QUALITY CONTROL</p>
       <h1 style={{ fontSize: 64, margin: "12px 0" }}>Software quality intelligence</h1>
       <p style={{ maxWidth: 720, fontSize: 20, lineHeight: 1.6, opacity: 0.82 }}>
-        ORBIT connects builds, immutable binaries, test evidence and confidence levels into one auditable control plane.
+        ORBIT connects builds, immutable binaries, test evidence and deterministic confidence levels into one auditable control plane.
       </p>
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 16 }}>
-        <Link href="/repositories" style={{ color: "#afc9ff" }}>Configure GitHub repositories →</Link>
+        <Link href="/dashboard" style={{ color: "#afc9ff" }}>Open delivery dashboard →</Link>
         <Link href="/builds" style={{ color: "#afc9ff" }}>Open build control →</Link>
+        <Link href="/repositories" style={{ color: "#afc9ff" }}>Configure repositories →</Link>
       </div>
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16, marginTop: 48 }}>
         {cards.map(([title, text]) => (
