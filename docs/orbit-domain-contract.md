@@ -1,10 +1,49 @@
 # ORBIT domain contract
 
+## Deterministic confidence model
+
+ORBIT confidence is authoritative, deterministic and calculated per immutable artifact/binary. AI and recommendation layers are consumers of confidence state and may never set or override it.
+
+The authoritative chain is:
+
+`ConfidenceAssessment -> normalized evidence -> artifact -> BuildRun -> repository/commit`.
+
+### Confidence levels
+
+- **Level 0** — the artifact has not satisfied Level 1.
+- **Level 1** — every enabled mandatory static-analysis gate for the artifact's exact BuildRun passed.
+- **Level 2** — Level 1 passed and every enabled mandatory Level 2 requirement has fresh passing evidence for the artifact.
+- **Level 3** — Levels 1 and 2 passed and every enabled mandatory Level 3 requirement has fresh passing evidence for the artifact.
+
+Promotion is cumulative. A higher level can never compensate for an invalid lower level.
+
+### States
+
+The confidence engine supports:
+
+- `not-configured` — no enabled mandatory requirement exists for that level.
+- `pending` — required evidence is missing or pending.
+- `running` — required evaluation is running and no required evidence has failed.
+- `failed` — required evidence failed.
+- `blocked` — the preceding confidence level has not passed.
+- `stale` — passing evidence exceeded its configured maximum age.
+- `passed` — all mandatory requirements for that level are fresh and passed.
+
+Missing, stale, pending, running, failed or blocked evidence prevents promotion.
+
+### Recalculation and audit
+
+`recalculateConfidence` rebuilds the assessment from stored repository requirements and stored normalized evidence. The resulting snapshot records artifact/build/repository/commit identity and the requirement/evidence inputs used for Levels 1–3.
+
+Every state or level transition is appended to `confidence_transitions`; `confidence_current` holds only the latest deterministic assessment. Both tables constrain their writer/source marker to `deterministic-engine`.
+
+No confidence API accepts an arbitrary confidence level or state. Inputs may configure evidence requirements or record normalized Level 2/3 evidence state; the official confidence is always recalculated by the engine.
+
 ## Level 1 — static analysis
 
 Level 1 is deterministic. An LLM or recommendation layer must never set the official Level 1 state.
 
-### States
+### Level 1 states
 
 - `not-configured` — no enabled mandatory static-analysis provider is configured for the repository.
 - `pending` — at least one mandatory provider has no result yet or reports a pending gate.
@@ -16,28 +55,20 @@ Failure has precedence over running/pending; running has precedence over pending
 
 ### StaticAnalysisResult
 
-A static-analysis result is bound to:
+A static-analysis result is bound to the exact BuildRun ID, repository ID, commit SHA, provider, source evidence row/digest, normalized gate state, findings metadata and trend/provenance metadata.
 
-- exact `BuildRun` ID,
-- exact repository ID,
-- exact commit SHA,
-- provider name,
-- source `evidence` row,
-- source evidence digest,
-- normalized gate state,
-- findings metadata,
-- trend/provenance metadata.
-
-The source evidence must have `evidence_type = static_analysis` and belong to the same BuildRun. This preserves the chain:
-
-`Level 1 assessment -> normalized static result -> raw evidence reference -> BuildRun -> commit/repository`.
+The source evidence must have `evidence_type = static_analysis` and belong to the same BuildRun.
 
 ### Adapter boundary
 
-Provider-specific payloads implement `StaticAnalysisAdapter` in `src/lib/static-analysis.ts`. ORB-6 ships the first adapter for SonarQube/SonarCloud. Future SARIF or GitHub code-scanning adapters must normalize into the same `StaticAnalysisResult` contract rather than altering Level 1 calculation.
+Provider-specific payloads implement `StaticAnalysisAdapter` in `src/lib/static-analysis.ts`. ORB-6 ships the first adapter for SonarQube/SonarCloud. Future SARIF or GitHub code-scanning adapters normalize into the same `StaticAnalysisResult` contract.
 
-### API
+## Confidence API
 
-- `POST /api/static-analysis/configure` — configure a provider as required/optional and enabled/disabled for a repository.
-- `POST /api/static-analysis/sonar` — ingest a Sonar quality-gate result referencing already-ingested static-analysis evidence.
-- `GET /api/static-analysis/level-1?buildRunId=<id>` — return deterministic Level 1 status and mandatory-provider states.
+- `POST /api/confidence/configure` — configure a mandatory/optional Level 2 or 3 evidence requirement, optionally with maximum evidence age.
+- `POST /api/confidence/evidence` — record normalized artifact evidence state and immediately recalculate confidence.
+- `POST /api/confidence/recalculate` — explicitly recalculate one artifact from persisted evidence/configuration.
+- `GET /api/confidence/status?artifactId=<id>` — recalculate and return current deterministic confidence.
+- `GET /api/confidence/history?artifactId=<id>` — return the immutable transition audit trail.
+
+Level 1 endpoints remain under `/api/static-analysis/*`.
