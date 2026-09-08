@@ -18,6 +18,7 @@ test("PostgreSQL: config audit, rollback, webhook deduplication, queue and revoc
     await db.query(await readFile("db/migrations/001_init.sql", "utf8"));
     await db.query(await readFile("db/migrations/002_github_onboarding.sql", "utf8"));
     await db.query(await readFile("db/migrations/003_build_orchestration.sql", "utf8"));
+    await db.query(await readFile("db/migrations/004_artifact_evidence.sql", "utf8"));
     class StubGitHub extends GitHubClient {
       override async validate() { return { repository: { id: 5, name: "repo", full_name: "org/repo", default_branch: "main", archived: false }, workflow: { id: 7, name: "Build", path: ".github/workflows/build.yml", state: "active" }, refSha: "abc" }; }
     }
