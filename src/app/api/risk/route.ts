@@ -1,15 +1,21 @@
-import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
+import { getDb } from "@/lib/db";
+import { errorResponse, json } from "@/lib/github/http";
 import { requireOperator } from "@/lib/github/security";
 import { affectedComponents, affectedTests, rankComponentRisk } from "@/lib/risk";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
-  const auth=requireOperator(request); if(auth instanceof Response) return auth;
-  const url=new URL(request.url); const db=getPool();
-  const repositoryId=url.searchParams.get("repositoryId") ? Number(url.searchParams.get("repositoryId")) : undefined;
-  const commitSha=url.searchParams.get("commitSha");
   try {
-    if(commitSha && repositoryId) return NextResponse.json({ affectedComponents:await affectedComponents(db,repositoryId,commitSha), affectedTests:await affectedTests(db,repositoryId,commitSha) });
-    return NextResponse.json({ risks:await rankComponentRisk(db,repositoryId) });
-  } catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Risk query failed"},{status:400}); }
+    requireOperator(request);
+    const url=new URL(request.url);
+    const raw=url.searchParams.get("repositoryId");
+    const repositoryId=raw ? Number(raw) : undefined;
+    if(raw && (!Number.isInteger(repositoryId) || Number(repositoryId)<=0)) return json({error:"Invalid repositoryId"},400);
+    const commitSha=url.searchParams.get("commitSha");
+    const db=getDb();
+    if(commitSha && repositoryId) return json({affectedComponents:await affectedComponents(db,repositoryId,commitSha),affectedTests:await affectedTests(db,repositoryId,commitSha)});
+    return json({risks:await rankComponentRisk(db,repositoryId)});
+  } catch(error) { return errorResponse(error); }
 }
