@@ -94,9 +94,23 @@ async function quarantine(db: Pool | PoolClient, input: { buildRunId?: number; a
   await db.query("INSERT INTO evidence_quarantine(build_run_id,artifact_digest,source,reason,raw_storage_ref) VALUES($1,$2,$3,$4,$5)", [input.buildRunId??null,input.artifactDigest??null,input.source,reason,input.rawStorageRef??null]);
 }
 
+function quarantineMetadata(raw: unknown) {
+  const value = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const buildRunId = typeof value.buildRunId === "number" && Number.isInteger(value.buildRunId) && value.buildRunId > 0 ? value.buildRunId : undefined;
+  const artifactDigest = typeof value.artifactDigest === "string" ? value.artifactDigest.slice(0, 512) : undefined;
+  const source = typeof value.source === "string" && value.source.length > 0 ? value.source.slice(0, 512) : "unknown";
+  const rawStorageRef = typeof value.rawStorageRef === "string" && value.rawStorageRef.length > 0 ? value.rawStorageRef.slice(0, 2048) : undefined;
+  return { buildRunId, artifactDigest, source, rawStorageRef };
+}
+
 export async function ingestEvidence(db: Pool, raw: unknown) {
   let input: z.infer<typeof evidenceSchema>;
-  try { input = evidenceSchema.parse(raw); } catch (error) { throw error; }
+  try {
+    input = evidenceSchema.parse(raw);
+  } catch (error) {
+    await quarantine(db, quarantineMetadata(raw), error instanceof Error ? error.message : "Invalid evidence envelope");
+    throw error;
+  }
   try {
     const run = await db.query("SELECT id FROM build_runs WHERE id=$1", [input.buildRunId]);
     if (!run.rowCount) throw new Error("BuildRun does not exist");
