@@ -17,8 +17,13 @@ export class GitHubClient {
     });
     if (!response.ok) {
       const status = [403, 404].includes(response.status) ? response.status : 502;
-      throw new IntegrationError(status, response.status === 429 || response.headers.get("x-ratelimit-remaining") === "0"
-        ? "GitHub rate limit reached; retry later" : "GitHub request failed; check installation access and permissions");
+      const body = await response.json().catch(() => undefined) as { message?: string } | undefined;
+      const message = body?.message === "Workflow does not have 'workflow_dispatch' trigger"
+        ? "The selected workflow does not support manual dispatch; add workflow_dispatch to its on triggers"
+        : response.status === 429 || response.headers.get("x-ratelimit-remaining") === "0"
+          ? "GitHub rate limit reached; retry later"
+          : "GitHub request failed; check installation access and permissions";
+      throw new IntegrationError(response.status === 422 ? 422 : status, message);
     }
     return response;
   }

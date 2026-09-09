@@ -22,7 +22,7 @@ export async function saveBuildSettings(db: Pool, github: GitHubClient, input: z
   if (!repository) throw new IntegrationError(403, "Repository is not authorized for this installation");
   const result = await db.query(`UPDATE github_repositories SET enabled=$3, event_builds=$4,
       schedule_interval_minutes=$5,
-      next_scheduled_at=CASE WHEN $3 AND $5 IS NOT NULL THEN COALESCE(next_scheduled_at, now()+($5 || ' minutes')::interval) ELSE NULL END,
+      next_scheduled_at=CASE WHEN $3 AND $5::integer IS NOT NULL THEN COALESCE(next_scheduled_at, now()+make_interval(mins => $5::integer)) ELSE NULL END,
       updated_at=now()
     WHERE repository_id=$1 AND installation_id=$2 AND access_status='active' RETURNING *`,
   [input.repositoryId, input.installationId, input.enabled, input.eventBuilds, input.scheduleIntervalMinutes]);
@@ -56,7 +56,7 @@ export async function enqueueDueSchedules(client: PoolClient) {
     const triggerKey = `schedule:${row.repository_id}:${new Date(row.next_scheduled_at).toISOString()}`;
     const payload: TriggerPayload = { repositoryId: Number(row.repository_id), installationId: Number(row.installation_id), triggerType: "schedule", triggerKey, requestedBy: "orbit.scheduler" };
     await client.query("INSERT INTO job_queue(job_type,payload) VALUES ('build.trigger',$1)", [payload]);
-    await client.query(`UPDATE github_repositories SET next_scheduled_at=next_scheduled_at+(schedule_interval_minutes || ' minutes')::interval, updated_at=now() WHERE repository_id=$1`, [row.repository_id]);
+    await client.query(`UPDATE github_repositories SET next_scheduled_at=next_scheduled_at+make_interval(mins => schedule_interval_minutes), updated_at=now() WHERE repository_id=$1`, [row.repository_id]);
   }
 }
 

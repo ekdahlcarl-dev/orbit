@@ -72,3 +72,11 @@ test("workflow dispatch uses the configured ref name", async () => {
   await github.dispatch(10, 5, 7, "heads/main");
   assert.deepEqual(dispatchBody, { ref: "main" });
 });
+
+test("workflow dispatch explains when manual triggers are missing", async () => {
+  const github = new GitHubClient(mockTransport(() => new Response(JSON.stringify({
+    message: "Workflow does not have 'workflow_dispatch' trigger",
+  }), { status: 422, headers: { "content-type": "application/json" } })), env);
+  await assert.rejects(() => github.dispatch(10, 5, 7, "heads/main"), error =>
+    error instanceof Error && error.message.includes("does not support manual dispatch"));
+});
