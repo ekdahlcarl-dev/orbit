@@ -36,10 +36,11 @@ export async function runWorkerIteration(db = getDb(), github = new GitHubClient
         throw new Error(`Unsupported job type: ${job.job_type}`);
       }
       await client.query("UPDATE job_queue SET status='succeeded', updated_at=now() WHERE id=$1", [job.id]);
-    } catch {
+    } catch (error) {
       await client.query("ROLLBACK TO SAVEPOINT process_job");
       await client.query(`UPDATE job_queue SET status=$2, available_at=now()+interval '30 seconds', updated_at=now()
         WHERE id=$1`, [job.id, job.attempts + 1 >= 3 ? "failed" : "queued"]);
+      logger.error({ err: error, jobId: job.id, jobType: job.job_type, payload: job.payload }, "worker job failed");
       logger.warn({ jobId: job.id }, "worker job failed; bounded retry scheduled or exhausted");
     }
     await client.query("COMMIT");
