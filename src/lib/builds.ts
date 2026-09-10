@@ -100,4 +100,13 @@ export async function syncWorkflowRun(client: PoolClient, installationId: number
       started_at=CASE WHEN $3='running' THEN COALESCE(started_at,now()) ELSE started_at END,
       completed_at=CASE WHEN $3 IN ('succeeded','failed','canceled') THEN COALESCE(completed_at,now()) ELSE completed_at END,
       updated_at=now() WHERE id=$1`, [id, workflowRun.id, mapped]);
+
+  if (["succeeded", "failed", "canceled"].includes(mapped)) {
+    await client.query(`UPDATE build_runs SET status=$5,
+        completed_at=COALESCE(completed_at,now()),
+        updated_at=now()
+      WHERE repository_id=$1 AND installation_id=$2 AND workflow_id=$3 AND commit_sha=$4
+        AND github_run_id IS NULL AND status IN ('queued','running')`,
+    [repositoryId, installationId, workflowRun.workflow_id, workflowRun.head_sha, mapped]);
+  }
 }
