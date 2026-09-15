@@ -4,6 +4,7 @@ import { allowedInstallations, appJwt, IntegrationError, requireInstallation } f
 export interface Repository { id: number; name: string; full_name: string; default_branch: string; archived: boolean; }
 export interface Workflow { id: number; name: string; path: string; state: string; }
 export interface Installation { id: number; account: { login: string }; suspended_at: string | null; }
+export interface WorkflowArtifact { id: number; name: string; size_in_bytes: number; archive_download_url: string; expired: boolean; digest?: string | null; }
 
 export class GitHubClient {
   constructor(private transport: typeof fetch = fetch, private env: EnvironmentInput = process.env) {}
@@ -102,5 +103,11 @@ export class GitHubClient {
     const { token, root } = await this.repositoryContext(installationId, repositoryId);
     const refName = ref.replace(/^(heads|tags)\//, "");
     await this.response(`${root}/actions/workflows/${workflowId}/dispatches`, token, { ref: refName });
+  }
+
+  async workflowArtifacts(installationId: number, repositoryId: number, runId: number): Promise<WorkflowArtifact[]> {
+    const { token, root } = await this.repositoryContext(installationId, repositoryId);
+    return (await this.pages<WorkflowArtifact>(`${root}/actions/runs/${runId}/artifacts`, token, "artifacts"))
+      .filter(artifact => !artifact.expired);
   }
 }
