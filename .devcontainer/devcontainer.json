@@ -7,10 +7,17 @@
   },
   "forwardPorts": [3000],
   "portsAttributes": {
-    "3000": { "label": "ORBIT", "visibility": "private" },
-    "5433": { "label": "PostgreSQL", "onAutoForward": "ignore" }
+    "3000": {
+      "label": "ORBIT",
+      "visibility": "public"
+    },
+    "5433": {
+      "label": "PostgreSQL",
+      "onAutoForward": "ignore"
+    }
   },
   "postCreateCommand": "npm ci",
+  "postStartCommand": "bash scripts/codespace-start.sh",
   "customizations": {
     "vscode": {
       "extensions": [
