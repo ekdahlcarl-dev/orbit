@@ -6,11 +6,11 @@ type Action={id:number;description:string;outcome:string|null;defects_found:numb
 type Item={id:number;source:"demo"|"ai";component_key:string;target_level:number;action:string;rationale:string;citations:{sourceRef?:string;excerpt?:string}[];status:string;decisions:Decision[];actions:Action[]};
 export default function RecommendationsPage(){
  const [username,setUsername]=useState(""),[password,setPassword]=useState(""),[repositoryId,setRepositoryId]=useState("");
- const [items,setItems]=useState<Item[]>([]),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+ const [items,setItems]=useState<Item[]>([]),[metrics,setMetrics]=useState<Record<string,number>|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  const auth=()=> "Basic "+btoa(String.fromCharCode(...new TextEncoder().encode(username+":"+password)));
  async function load(event?:FormEvent){event?.preventDefault();setBusy(true);setError("");
   try{const response=await fetch("/api/recommendations?repositoryId="+encodeURIComponent(repositoryId),{headers:{Authorization:auth()}});
-   const body=await response.json();if(!response.ok)throw Error(body.error||"Unable to load recommendations");setItems(body.items);
+   const body=await response.json();if(!response.ok)throw Error(body.error||"Unable to load recommendations");setItems(body.items);setMetrics(body.metrics);
   }catch(e){setError(e instanceof Error?e.message:"Request failed");}finally{setBusy(false);}
  }
  async function send(payload:Record<string,unknown>){setBusy(true);setError("");
@@ -30,6 +30,7 @@ export default function RecommendationsPage(){
   </form>
   <p><button disabled={busy||!repositoryId||!username||!password} onClick={()=>send({type:"seed"})}>Create demo recommendations (no API cost)</button></p>
   {error&&<p role="alert">{error}</p>}
+  {metrics&&<p role="status">Recommendations: {metrics.total} · Accepted: {metrics.accepted} · Rejected: {metrics.rejected} · Deferred: {metrics.deferred} · Pending: {metrics.pending} · Recorded test outcomes: {metrics.recorded_outcomes} · Defects found: {metrics.defects_found}</p>}
   {items.map(item=><article key={item.id} style={{border:"1px solid #65718c",borderRadius:8,padding:16,marginBottom:16}}>
    <h2>{item.component_key} · L{item.target_level} <small>{item.source==="demo"?"DEMO / SYNTHETIC":"AI / REVIEW EVIDENCE"}</small></h2>
    <p><strong>Recommendation:</strong> {item.action}</p><p>{item.rationale}</p><p><strong>Status:</strong> {item.status}</p>
