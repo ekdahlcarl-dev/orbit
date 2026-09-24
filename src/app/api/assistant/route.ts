@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) return json({ error: "AI provider is not configured (OPENAI_API_KEY)" }, 503);
     const db = getDb();
-    const authorized = await db.query("SELECT 1 FROM repository_configs WHERE repository_id=$1 AND enabled=true", [repositoryId]);
+    const authorized = await db.query("SELECT 1 FROM github_repositories WHERE repository_id=$1 AND enabled=true", [repositoryId]);
     if (!authorized.rowCount) return json({ error: "Repository not configured or disabled" }, 404);
     const provider = new OpenAiRecommendationProvider(key, process.env.ORBIT_AI_MODEL || "gpt-4.1-mini");
     const result = await recommendTesting(db, provider, question, {
