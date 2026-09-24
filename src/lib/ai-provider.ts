@@ -30,7 +30,18 @@ export class OpenAiRecommendationProvider implements LlmProvider {
       }),
       signal: AbortSignal.timeout(30000),
     });
-    if (!response.ok) throw new Error(`AI provider request failed (HTTP ${response.status})`);
+    if (!response.ok) {
+          const errorBody = await response.text();
+
+          console.error("OpenAI API error:", {
+            status: response.status,
+            body: errorBody,
+          });
+
+          throw new Error(
+            `AI provider request failed (HTTP ${response.status})`
+          );
+  }
     const data: unknown = await response.json();
     const parsed = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1) }).parse(data);
     return answerSchema.parse(JSON.parse(parsed.choices[0].message.content));

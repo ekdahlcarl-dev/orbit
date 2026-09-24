@@ -33,5 +33,11 @@ export async function POST(request: Request) {
       repositoryId, artifactId, componentId, since: since ? new Date(since) : undefined,
     });
     return json(result);
-  } catch (error) { return errorResponse(error); }
+  } catch (error) { 
+
+  console.error("ORB-12 assistant request failed:", error);
+  return errorResponse(error);
+
+
+  }
 }
