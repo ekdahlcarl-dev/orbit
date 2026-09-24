@@ -19,6 +19,7 @@ export default function Home() {
         <Link href="/builds" style={{ color: "#afc9ff" }}>Open build control →</Link>
         <Link href="/repositories" style={{ color: "#afc9ff" }}>Configure repositories →</Link>
         <Link href="/assistant" style={{ color: "#afc9ff" }}>Open AI assistant →</Link>
+        <Link href="/recommendations" style={{ color: "#afc9ff" }}>Recommendation inbox / Demo Mode →</Link>
       </div>
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16, marginTop: 48 }}>
         {cards.map(([title, text]) => (
