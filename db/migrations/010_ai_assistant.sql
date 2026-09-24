@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE ai_evidence_chunks (
   id bigserial PRIMARY KEY,
-  repository_id bigint NOT NULL REFERENCES repository_configs(repository_id) ON DELETE CASCADE,
+  repository_id bigint NOT NULL REFERENCES github_repositories(repository_id) ON DELETE CASCADE,
   artifact_id bigint REFERENCES artifacts(id) ON DELETE CASCADE,
   component_id bigint REFERENCES knowledge_components(id) ON DELETE SET NULL,
   evidence_id bigint REFERENCES evidence(id) ON DELETE CASCADE,
@@ -21,7 +21,7 @@ CREATE INDEX ai_evidence_chunks_embedding_idx ON ai_evidence_chunks USING hnsw (
 
 CREATE TABLE ai_recommendation_runs (
   id bigserial PRIMARY KEY,
-  repository_id bigint NOT NULL REFERENCES repository_configs(repository_id) ON DELETE CASCADE,
+  repository_id bigint NOT NULL REFERENCES github_repositories(repository_id) ON DELETE CASCADE,
   artifact_id bigint REFERENCES artifacts(id) ON DELETE SET NULL,
   question text NOT NULL,
   context jsonb NOT NULL DEFAULT '{}'::jsonb,
