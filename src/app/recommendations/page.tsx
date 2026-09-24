@@ -38,10 +38,10 @@ export default function RecommendationsPage(){
    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
     {(["accepted","rejected","deferred"] as const).map(decision=><button key={decision} disabled={busy} onClick={()=>{
      const rationale=window.prompt("Optional decision rationale (max 2000 characters):","");if(rationale===null)return;
-     send({type:"decide",id:item.id,decision,rationale});
+     send({type:"decide",id:Number(item.id),decision,rationale});
     }}>{decision==="accepted"?"Accept":decision==="rejected"?"Reject":"Defer"}</button>)}
    </div>
-   {item.status==="accepted"&&<p><button disabled={busy} onClick={()=>{const description=window.prompt("Planned test action:");if(description?.trim())send({type:"action",id:item.id,description});}}>Add planned test action</button></p>}
+   {item.status==="accepted"&&<p><button disabled={busy} onClick={()=>{const description=window.prompt("Planned test action:");if(description?.trim())send({type:"action",id:Number(item.id),description});}}>Add planned test action</button></p>}
    {item.actions.map(action=><div key={action.id} style={{padding:8,marginTop:8,border:"1px solid #65718c"}}>
     <strong>Test action #{action.id}:</strong> {action.description}<p>Outcome: {action.outcome||"Not recorded"} · Defects found: {action.defects_found??"—"}</p>
     <button disabled={busy} onClick={()=>{const outcome=window.prompt("Observed outcome:",action.outcome||"");if(!outcome?.trim())return;
