@@ -17,6 +17,8 @@ if [ -f .env.local ]; then
   set +a
 fi
 
+export DATABASE_URL="${DATABASE_URL:-postgres://orbit:orbit@localhost:5433/orbit}"
+
 echo "Running migrations..."
 npm run db:migrate
 
