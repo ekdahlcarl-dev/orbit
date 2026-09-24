@@ -36,7 +36,19 @@ export async function GET(request:Request) {
   const items=await db.query(`SELECT i.*,COALESCE((SELECT jsonb_agg(to_jsonb(d) ORDER BY d.created_at,d.id) FROM recommendation_decisions d WHERE d.recommendation_id=i.id),'[]'::jsonb) AS decisions,
    COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a.created_at,a.id) FROM recommendation_actions a WHERE a.recommendation_id=i.id),'[]'::jsonb) AS actions
    FROM recommendation_items i WHERE i.repository_id=$1 ORDER BY i.created_at DESC,i.id DESC LIMIT 200`,[repositoryId]);
-  return json({items:items.rows});
+  const metrics=await db.query(`SELECT
+   count(*)::int AS total,
+   count(*) FILTER (WHERE status='accepted')::int AS accepted,
+   count(*) FILTER (WHERE status='rejected')::int AS rejected,
+   count(*) FILTER (WHERE status='deferred')::int AS deferred,
+   count(*) FILTER (WHERE status='pending')::int AS pending
+   FROM recommendation_items WHERE repository_id=$1`,[repositoryId]);
+  const outcomes=await db.query(`SELECT count(*)::int AS recorded_outcomes,
+   COALESCE(sum(a.defects_found),0)::int AS defects_found,
+   count(*) FILTER (WHERE a.defects_found>0)::int AS actions_finding_defects
+   FROM recommendation_actions a JOIN recommendation_items i ON i.id=a.recommendation_id
+   WHERE i.repository_id=$1 AND a.outcome IS NOT NULL`,[repositoryId]);
+  return json({items:items.rows,metrics:{...metrics.rows[0],...outcomes.rows[0]}});
  } catch(e){return errorResponse(e);}
 }
 export async function POST(request:Request) {
