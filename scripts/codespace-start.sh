@@ -7,7 +7,7 @@ echo "Starting PostgreSQL..."
 docker compose up -d
 
 echo "Waiting for PostgreSQL..."
-until docker exec $(docker ps -q --filter ancestor=postgres:16-alpine) pg_isready -U orbit -d orbit >/dev/null 2>&1; do
+until docker compose exec -T postgres pg_isready -U orbit -d orbit >/dev/null 2>&1; do
   sleep 1
 done
 
@@ -16,6 +16,8 @@ if [ -f .env.local ]; then
   source .env.local
   set +a
 fi
+
+export DATABASE_URL="${DATABASE_URL:-postgres://orbit:orbit@localhost:5433/orbit}"
 
 echo "Running migrations..."
 npm run db:migrate
