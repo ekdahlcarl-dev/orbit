@@ -6,6 +6,10 @@ ORBIT is the software quality intelligence platform defined in Linear project OR
 
 This is the standalone [ekdahlcarl-dev/orbit](https://github.com/ekdahlcarl-dev/orbit) repository. It establishes the executable boundaries for the ORBIT UI/API, PostgreSQL persistence, background jobs, object storage, configuration, structured logging and OpenTelemetry. Run all commands from this repository's root.
 
+## Architecture
+
+The solution architecture is maintained as documentation-as-code in [docs/architecture/solution-architecture.md](docs/architecture/solution-architecture.md). It describes ORBIT's system context, confidence model and gates, integrations, data and AI/RAG architecture, security, deployment, and architecture principles.
+
 ## Local development
 
 ```bash
