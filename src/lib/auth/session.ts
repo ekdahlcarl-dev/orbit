@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { GithubIdentity } from "./oauth";
 
 export type OrbitSession = { user: GithubIdentity; expiresAt: number };
