@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { errorResponse, json } from "@/lib/github/http";
-import { requireOperator } from "@/lib/github/security";
+import { requireGithubSession } from "@/lib/auth/guard";
 import { getDashboard } from "@/lib/dashboard";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    requireOperator(request);
+    await requireGithubSession(request);
     const url = new URL(request.url);
     const repositoryId = Number(url.searchParams.get("repositoryId"));
     const artifactId = Number(url.searchParams.get("artifactId"));
