@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import "./dashboard.css";
 
 type Repository = { repository_id: string; full_name: string; default_ref: string; enabled: boolean; access_status: string };
@@ -21,7 +21,7 @@ export default function DashboardPage() {
   const [repositoryId,setRepositoryId]=useState(""); const [branch,setBranch]=useState(""); const [binary,setBinary]=useState(""); const [windowDays,setWindowDays]=useState("30");
   const [artifactId,setArtifactId]=useState("");
 
-  const fetchDashboard=useCallback(async (nextArtifactId=artifactId) => {
+  async function fetchDashboard(nextArtifactId=artifactId) {
     const search = new URLSearchParams();
     if (repositoryId) search.set("repositoryId",repositoryId);
     if (branch) search.set("branch",branch);
@@ -30,9 +30,9 @@ export default function DashboardPage() {
     if (nextArtifactId) search.set("artifactId",nextArtifactId);
     const response=await fetch(`/api/dashboard?${search}`,{cache:"no-store",credentials:"same-origin"});
     const body=await response.json(); if(!response.ok) throw new Error(body.error??"Dashboard request failed"); setData(body);
-  },[repositoryId,branch,binary,windowDays,artifactId]);
+  }
   async function run(work:()=>Promise<void>){setBusy(true);setError("");try{await work();}catch(e){setError(e instanceof Error?e.message:"Request failed");}finally{setBusy(false);}}
-  useEffect(()=>{let active=true; (async()=>{try{const response=await fetch("/api/auth/me",{cache:"no-store"});if(!response.ok)return;const result=await response.json() as {user:{login:string}};if(active){setIdentity(result.user.login);await fetchDashboard();}}catch{if(active)setError("Unable to load dashboard");}finally{if(active)setChecking(false);}})();return()=>{active=false;};},[fetchDashboard]);
+  useEffect(()=>{let active=true; (async()=>{try{const response=await fetch("/api/auth/me",{cache:"no-store"});if(!response.ok)return;const result=await response.json() as {user:{login:string}};if(active){setIdentity(result.user.login);const dashboard=await fetch("/api/dashboard",{cache:"no-store",credentials:"same-origin"});const payload=await dashboard.json();if(!dashboard.ok)throw new Error(payload.error??"Dashboard request failed");if(active)setData(payload);}}catch{if(active)setError("Unable to load dashboard");}finally{if(active)setChecking(false);}})();return()=>{active=false;};},[]);
   async function logout(){await run(async()=>{const response=await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});if(!response.ok)throw new Error("Logout failed");setIdentity(null);setData(null);});}
   async function applyFilters(e:FormEvent){e.preventDefault();setArtifactId("");await run(()=>fetchDashboard(""));}
   async function selectArtifact(id:string){setArtifactId(id);await run(()=>fetchDashboard(id));}
