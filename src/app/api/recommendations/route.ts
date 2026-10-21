@@ -54,6 +54,7 @@ export async function GET(request:Request) {
 }
 export async function POST(request:Request) {
  try {
+  await requireAccess(request,"read");
   requireSameOrigin(request);
   if(Number(request.headers.get("content-length"))>8192)return json({error:"Request too large"},413);
   const parsed=command.safeParse(await request.json());
