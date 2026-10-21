@@ -22,7 +22,7 @@ export function githubRunUrl(fullName: string, githubRunId: string | number | nu
 export async function getDashboard(db: Pool, filters: DashboardFilters = {}) {
   const repositories = (await db.query(
     `SELECT repository_id,full_name,default_ref,enabled,access_status,updated_at
-     FROM github_repositories WHERE repository_id=$1 ORDER BY full_name`, [filters.repositoryId],
+     FROM github_repositories WHERE ($1::bigint IS NULL OR repository_id=$1) ORDER BY full_name`, [filters.repositoryId ?? null],
   )).rows;
 
   const params: unknown[] = [];
