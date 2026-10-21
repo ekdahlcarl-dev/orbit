@@ -2,7 +2,8 @@ import { getDb } from "@/lib/db";
 import { recommendTesting } from "@/lib/ai-assistant";
 import { OpenAiRecommendationProvider } from "@/lib/ai-provider";
 import { errorResponse, json } from "@/lib/github/http";
-import { requireOperator } from "@/lib/github/security";
+import { requireAccess } from "@/lib/auth/rbac";
+import { requireSameOrigin } from "@/lib/auth/guard";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -18,11 +19,12 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    requireOperator(request);
+    requireSameOrigin(request);
     if (Number(request.headers.get("content-length")) > 8192) return json({ error: "Request too large" }, 413);
     const parsed = schema.safeParse(await request.json());
     if (!parsed.success) return json({ error: "Invalid assistant request", details: parsed.error.issues }, 400);
     const { repositoryId, artifactId, componentId, since, question } = parsed.data;
+    await requireAccess(request, "read", repositoryId);
     const key = process.env.OPENAI_API_KEY;
     if (!key) return json({ error: "AI provider is not configured (OPENAI_API_KEY)" }, 503);
     const db = getDb();
