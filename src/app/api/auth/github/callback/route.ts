@@ -11,7 +11,10 @@ export async function GET(request: Request) {
   try {
     const configured = new URL(base);
     const incoming = new URL(request.url);
-    if (incoming.origin !== configured.origin || incoming.pathname !== "/api/auth/github/callback") return new Response("Invalid callback origin", { status: 403 });
+    // Codespaces and other trusted reverse proxies may rewrite request.url to an internal origin.
+    // Bind the callback to the configured public URL through the OAuth redirect URI,
+    // signed state and same-site state cookie; do not trust forwarded host headers.
+    if (incoming.pathname !== "/api/auth/github/callback") return new Response("Invalid callback path", { status: 403 });
     const state = incoming.searchParams.get("state") ?? "";
     const code = incoming.searchParams.get("code") ?? "";
     const cookieState = parseCookie(request.headers.get("cookie"), "orbit_oauth_state");
