@@ -22,7 +22,7 @@ export function githubRunUrl(fullName: string, githubRunId: string | number | nu
 export async function getDashboard(db: Pool, filters: DashboardFilters = {}) {
   const repositories = (await db.query(
     `SELECT repository_id,full_name,default_ref,enabled,access_status,updated_at
-     FROM github_repositories ORDER BY full_name`,
+     FROM github_repositories WHERE repository_id=$1 ORDER BY full_name`, [filters.repositoryId],
   )).rows;
 
   const params: unknown[] = [];
@@ -75,7 +75,7 @@ export async function getDashboard(db: Pool, filters: DashboardFilters = {}) {
       `SELECT a.*,r.full_name,b.ref,b.status AS build_status,b.github_run_id,b.requested_at,
               c.confidence_level,c.level_1_state,c.level_2_state,c.level_3_state,c.calculated_at
        FROM artifacts a JOIN build_runs b ON b.id=a.build_run_id JOIN github_repositories r ON r.repository_id=a.repository_id
-       LEFT JOIN confidence_current c ON c.artifact_id=a.id WHERE a.id=$1`, [filters.artifactId],
+       LEFT JOIN confidence_current c ON c.artifact_id=a.id WHERE a.id=$1 AND a.repository_id=$2`, [filters.artifactId, filters.repositoryId],
     )).rows[0];
     if (artifact) {
       const evidence = (await db.query(
