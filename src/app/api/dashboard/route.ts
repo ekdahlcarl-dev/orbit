@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { errorResponse, json } from "@/lib/github/http";
-import { requireGithubSession } from "@/lib/auth/guard";
+import { requireAccess } from "@/lib/auth/rbac";
 import { getDashboard } from "@/lib/dashboard";
 
 export const runtime = "nodejs";
@@ -8,9 +8,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireGithubSession(request);
     const url = new URL(request.url);
     const repositoryId = Number(url.searchParams.get("repositoryId"));
+    if (!Number.isSafeInteger(repositoryId) || repositoryId <= 0) return json({ error: "repositoryId is required" }, 400);
+    await requireAccess(request, "read", repositoryId);
     const artifactId = Number(url.searchParams.get("artifactId"));
     const fromRaw = url.searchParams.get("from");
     const from = fromRaw ? new Date(fromRaw) : undefined;
