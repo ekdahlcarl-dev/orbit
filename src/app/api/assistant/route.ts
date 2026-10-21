@@ -19,6 +19,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
+    await requireAccess(request, "read");
     requireSameOrigin(request);
     if (Number(request.headers.get("content-length")) > 8192) return json({ error: "Request too large" }, 413);
     const parsed = schema.safeParse(await request.json());
