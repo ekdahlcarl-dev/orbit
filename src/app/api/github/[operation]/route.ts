@@ -45,6 +45,7 @@ export async function GET(request: Request, context: Context) {
 
 export async function POST(request: Request, context: Context) {
   try {
+    await requireAccess(request, "read");
     requireSameOrigin(request);
     if ((await context.params).operation !== "configurations") return json({ error: "Not found" }, 404);
     const input = configurationSchema.parse(JSON.parse((await readLimitedBody(request, 16384)).toString("utf8")));
