@@ -11,6 +11,7 @@ type Context = { params: Promise<{ operation: string }> };
 
 export async function POST(request: Request, context: Context) {
   try {
+    await requireAccess(request, "read");
     requireSameOrigin(request);
     const { operation } = await context.params;
     const body = JSON.parse((await readLimitedBody(request, 5_500_000)).toString("utf8"));
