@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { errorResponse, json } from "@/lib/github/http";
-import { requireAccess } from "@/lib/auth/rbac";
+import { requireAccess, requireResourceAccess } from "@/lib/auth/rbac";
 import { getDashboard } from "@/lib/dashboard";
 
 export const runtime = "nodejs";
@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     if (!Number.isSafeInteger(repositoryId) || repositoryId <= 0) return json({ error: "repositoryId is required" }, 400);
     await requireAccess(request, "read", repositoryId);
     const artifactId = Number(url.searchParams.get("artifactId"));
+    if (Number.isInteger(artifactId) && artifactId > 0) await requireResourceAccess(request, "read", "artifact", artifactId);
     const fromRaw = url.searchParams.get("from");
     const from = fromRaw ? new Date(fromRaw) : undefined;
     if (fromRaw && Number.isNaN(from?.getTime())) return json({ error: "Invalid from timestamp" }, 400);
