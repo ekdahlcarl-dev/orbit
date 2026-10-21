@@ -14,7 +14,7 @@ export async function POST(request: Request, context: Context) {
     requireSameOrigin(request);
     const { operation } = await context.params;
     const body = JSON.parse((await readLimitedBody(request, 1_000_000)).toString("utf8"));
-    if (operation === "providers" || operation === "environments") await requireAccess(request, "user_admin");
+    if (operation === "providers" || operation === "environments") await requireAccess(request, "configuration_write", Number(body.repositoryId));
     else if (operation === "configure") await requireAccess(request, "configuration_write", Number(body.repositoryId));
     else if (operation === "runs") await requireResourceAccess(request, "configuration_write", "artifact", Number(body.artifactId));
     else return json({ error: "Not found" }, 404);
