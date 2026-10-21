@@ -17,6 +17,18 @@ test("PostgreSQL RBAC: identity roles and repository isolation", { skip: !proces
     const repoB = viewer + 4_000_000;
     await client.query("INSERT INTO orbit_user_roles(github_user_id,role) VALUES($1,'viewer'),($2,'product_owner'),($3,'admin')", [viewer,owner,admin]);
     await client.query("INSERT INTO orbit_repository_grants(github_user_id,repository_id) VALUES($1,$3),($2,$3),($4,$5)", [viewer,owner,repoA,admin,repoB]);
+    // Every role must be scoped to explicit repository grants.
+    for (const action of ["recommendation_decide", "build_trigger", "configuration_write", "user_admin"] as const) {
+      await assert.rejects(authorizeIdentity(client, viewer, action, repoA), { status: 403 });
+    }
+    assert.equal(await authorizeIdentity(client, owner, "read", repoA), "product_owner");
+    for (const action of ["build_trigger", "configuration_write", "user_admin"] as const) {
+      await assert.rejects(authorizeIdentity(client, owner, action, repoA), { status: 403 });
+    }
+    for (const action of ["read", "recommendation_decide", "build_trigger", "configuration_write", "user_admin"] as const) {
+      assert.equal(await authorizeIdentity(client, admin, action, repoB), "admin");
+      await assert.rejects(authorizeIdentity(client, admin, action, repoA), { status: 403 });
+    }
     assert.equal(await authorizeIdentity(client, viewer, "read", repoA), "viewer");
     await assert.rejects(authorizeIdentity(client, viewer, "recommendation_decide", repoA), { status: 403 });
     await assert.rejects(authorizeIdentity(client, viewer, "read", repoB), { status: 403 });
