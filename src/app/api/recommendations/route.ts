@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db";
 import { errorResponse, json } from "@/lib/github/http";
-import { requireOperator } from "@/lib/github/security";
+import { requireAccess } from "@/lib/auth/rbac";
+import { requireSameOrigin } from "@/lib/auth/guard";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -19,9 +20,9 @@ async function enabled(repositoryId:number) {
 }
 export async function GET(request:Request) {
  try {
-  requireOperator(request);
   const repositoryId=Number(new URL(request.url).searchParams.get("repositoryId"));
   if(!Number.isSafeInteger(repositoryId)||repositoryId<1) return json({error:"Invalid repository ID"},400);
+  await requireAccess(request,"read",repositoryId);
   if(!await enabled(repositoryId)) return json({error:"Repository not configured or disabled"},404);
   const db=getDb();
   // Idempotently import real recommendations already stored by ORB-12.
@@ -53,11 +54,14 @@ export async function GET(request:Request) {
 }
 export async function POST(request:Request) {
  try {
-  const actor=requireOperator(request);
+  await requireAccess(request,"read");
+  requireSameOrigin(request);
   if(Number(request.headers.get("content-length"))>8192)return json({error:"Request too large"},413);
   const parsed=command.safeParse(await request.json());
   if(!parsed.success)return json({error:"Invalid workflow request"},400);
   const input=parsed.data;
+  const access=await requireAccess(request,input.type==="seed"?"configuration_write":"recommendation_decide",input.repositoryId);
+  const actor=access.identity.login;
   if(!await enabled(input.repositoryId))return json({error:"Repository not configured or disabled"},404);
   const db=getDb();
   if(input.type==="seed"){

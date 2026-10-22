@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import "./dashboard.css";
 
 type Repository = { repository_id: string; full_name: string; default_ref: string; enabled: boolean; access_status: string };
@@ -16,25 +16,27 @@ type Data = { repositories: Repository[]; builds: Build[]; artifacts: Artifact[]
 const states = ["passed","failed","stale","pending","running","blocked","not-configured","missing"];
 
 export default function DashboardPage() {
-  const [username,setUsername]=useState(""); const [password,setPassword]=useState(""); const [auth,setAuth]=useState("");
+  const [identity,setIdentity]=useState<string|null>(null); const [checking,setChecking]=useState(true);
   const [data,setData]=useState<Data|null>(null); const [error,setError]=useState(""); const [busy,setBusy]=useState(false);
   const [repositoryId,setRepositoryId]=useState(""); const [branch,setBranch]=useState(""); const [binary,setBinary]=useState(""); const [windowDays,setWindowDays]=useState("30");
   const [artifactId,setArtifactId]=useState("");
 
-  async function fetchDashboard(authorization=auth, nextArtifactId=artifactId) {
+  async function fetchDashboard(nextArtifactId=artifactId) {
     const search = new URLSearchParams();
-    if (repositoryId) search.set("repositoryId",repositoryId);
+    if (!repositoryId) throw new Error("Select an authorized repository");
+    search.set("repositoryId",repositoryId);
     if (branch) search.set("branch",branch);
     if (binary) search.set("binary",binary);
     if (windowDays) search.set("from",new Date(Date.now()-Number(windowDays)*86400000).toISOString());
     if (nextArtifactId) search.set("artifactId",nextArtifactId);
-    const response=await fetch(`/api/dashboard?${search}`,{cache:"no-store",headers:{Authorization:authorization}});
+    const response=await fetch(`/api/dashboard?${search}`,{cache:"no-store",credentials:"same-origin"});
     const body=await response.json(); if(!response.ok) throw new Error(body.error??"Dashboard request failed"); setData(body);
   }
   async function run(work:()=>Promise<void>){setBusy(true);setError("");try{await work();}catch(e){setError(e instanceof Error?e.message:"Request failed");}finally{setBusy(false);}}
-  async function login(e:FormEvent){e.preventDefault();await run(async()=>{const raw=new TextEncoder().encode(`${username}:${password}`);const authorization=`Basic ${btoa(Array.from(raw,b=>String.fromCharCode(b)).join(""))}`;setAuth(authorization);setPassword("");await fetchDashboard(authorization,"");});}
-  async function applyFilters(e:FormEvent){e.preventDefault();setArtifactId("");await run(()=>fetchDashboard(auth,""));}
-  async function selectArtifact(id:string){setArtifactId(id);await run(()=>fetchDashboard(auth,id));}
+  useEffect(()=>{let active=true; (async()=>{try{const response=await fetch("/api/auth/me",{cache:"no-store"});if(!response.ok)return;const result=await response.json() as {user:{login:string}};if(active){setIdentity(result.user.login);const reposResponse=await fetch("/api/auth/repositories",{cache:"no-store",credentials:"same-origin"});const repos=await reposResponse.json() as Array<{repository_id:string}> & {error?:string};if(!reposResponse.ok)throw new Error(repos.error??"Unable to list authorized repositories");if(!repos.length){if(active)setError("No authorized repositories. Ask an ORBIT administrator to assign a repository grant.");return;}const selected=String(repos[0].repository_id);const dashboard=await fetch(`/api/dashboard?repositoryId=${encodeURIComponent(selected)}`,{cache:"no-store",credentials:"same-origin"});const payload=await dashboard.json();if(!dashboard.ok)throw new Error(payload.error??"Dashboard request failed");if(active){setRepositoryId(selected);setData(payload);}}}catch{if(active)setError("Unable to load dashboard");}finally{if(active)setChecking(false);}})();return()=>{active=false;};},[]);
+  async function logout(){await run(async()=>{const response=await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});if(!response.ok)throw new Error("Logout failed");setIdentity(null);setData(null);});}
+  async function applyFilters(e:FormEvent){e.preventDefault();setArtifactId("");await run(()=>fetchDashboard(""));}
+  async function selectArtifact(id:string){setArtifactId(id);await run(()=>fetchDashboard(id));}
 
   const summary=useMemo(()=>({
     repositories:data?.repositories.filter(r=>r.enabled&&r.access_status==="active").length??0,
@@ -43,12 +45,12 @@ export default function DashboardPage() {
     level3:data?.artifacts.filter(a=>Number(a.confidence_level)===3).length??0,
   }),[data]);
 
-  return <main className="dash"><header className="top"><div><Link href="/">ORBIT</Link><span>/ QUALITY CONTROL</span></div><Link href="/builds">Build control →</Link></header>
+  return <main className="dash"><header className="top"><div><Link href="/">ORBIT</Link><span>/ QUALITY CONTROL</span></div><span>{identity&&<>Signed in as {identity} <button onClick={()=>void logout()} disabled={busy}>Sign out</button></>} <Link href="/builds">Build control →</Link></span></header>
     <section className="hero"><div><p className="eyebrow">BUILD · BINARY · CONFIDENCE</p><h1>Delivery confidence dashboard</h1><p>Trace every release candidate from GitHub build to immutable binary and the evidence that currently permits—or blocks—promotion.</p></div></section>
     {error&&<p className="notice error">{error}</p>}
-    {!auth?<section className="card access"><h2>Operator access</h2><p>Use your ORBIT operator credentials to view delivery evidence.</p><form onSubmit={login}><label>Username<input value={username} onChange={e=>setUsername(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Open dashboard</button></form></section>:data&&<>
+    {checking?<section className="card access"><p>Checking GitHub session…</p></section>:!identity?<section className="card access"><h2>GitHub sign-in</h2><p>Authenticate with GitHub to view delivery evidence.</p><a href="/api/auth/github/start">Sign in with GitHub</a></section>:data&&<>
       <section className="metrics"><Metric label="Active repositories" value={summary.repositories}/><Metric label="Queued / running builds" value={summary.activeBuilds}/><Metric label="Binaries in view" value={summary.binaries}/><Metric label="Level 3 binaries" value={summary.level3}/></section>
-      <form className="filters card" onSubmit={applyFilters}><label>Repository<select value={repositoryId} onChange={e=>setRepositoryId(e.target.value)}><option value="">All repositories</option>{data.repositories.map(r=><option value={r.repository_id} key={r.repository_id}>{r.full_name}</option>)}</select></label><label>Branch / ref<input value={branch} placeholder="main" onChange={e=>setBranch(e.target.value)}/></label><label>Binary / digest<input value={binary} placeholder="name or digest" onChange={e=>setBinary(e.target.value)}/></label><label>Time window<select value={windowDays} onChange={e=>setWindowDays(e.target.value)}><option value="1">24 hours</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="">All time</option></select></label><button disabled={busy}>Apply</button></form>
+      <form className="filters card" onSubmit={applyFilters}><label>Repository<select value={repositoryId} onChange={e=>setRepositoryId(e.target.value)}>{data.repositories.map(r=><option value={r.repository_id} key={r.repository_id}>{r.full_name}</option>)}</select></label><label>Branch / ref<input value={branch} placeholder="main" onChange={e=>setBranch(e.target.value)}/></label><label>Binary / digest<input value={binary} placeholder="name or digest" onChange={e=>setBinary(e.target.value)}/></label><label>Time window<select value={windowDays} onChange={e=>setWindowDays(e.target.value)}><option value="1">24 hours</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="">All time</option></select></label><button disabled={busy}>Apply</button></form>
 
       <section className="grid"><div className="card span2"><div className="section-title"><div><p className="eyebrow">LIVE DELIVERY</p><h2>Recent builds</h2></div><button className="ghost" disabled={busy} onClick={()=>void run(()=>fetchDashboard())}>Refresh</button></div>{!data.builds.length?<Empty text="No builds match these filters."/>:<div className="table"><div className="tr head"><span>Repository</span><span>Status</span><span>Ref / commit</span><span>Artifacts</span><span>Requested</span></div>{data.builds.map(b=><div className="tr" key={b.id}><span><strong>{b.full_name}</strong><small>{b.trigger_type}</small></span><span><Status value={b.status}/></span><span>{b.ref}<small>{b.commit_sha.slice(0,12)}</small></span><span>{b.artifact_count}</span><span>{formatDate(b.requested_at)}{b.github_url&&<a href={b.github_url} target="_blank" rel="noreferrer">GitHub run ↗</a>}</span></div>)}</div>}</div>
 

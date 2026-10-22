@@ -1,6 +1,8 @@
+import { requireAccess, requireResourceAccess } from "@/lib/auth/rbac";
+import { requireSameOrigin } from "@/lib/auth/guard";
 import { getDb } from "@/lib/db";
 import { errorResponse, json } from "@/lib/github/http";
-import { readLimitedBody, requireOperator } from "@/lib/github/security";
+import { readLimitedBody } from "@/lib/github/security";
 import { ingestEvidence, registerArtifact } from "@/lib/evidence";
 
 export const runtime = "nodejs";
@@ -9,9 +11,12 @@ type Context = { params: Promise<{ operation: string }> };
 
 export async function POST(request: Request, context: Context) {
   try {
-    requireOperator(request);
+    await requireAccess(request, "read");
+    requireSameOrigin(request);
     const { operation } = await context.params;
     const body = JSON.parse((await readLimitedBody(request, 5_500_000)).toString("utf8"));
+    if (operation !== "artifacts" && operation !== "ingest") return json({ error: "Not found" }, 404);
+    await requireResourceAccess(request, "configuration_write", "build", Number(body.buildRunId));
     if (operation === "artifacts") return json(await registerArtifact(getDb(), body), 201);
     if (operation === "ingest") return json(await ingestEvidence(getDb(), body), 201);
     return json({ error: "Not found" }, 404);

@@ -41,5 +41,5 @@ export async function listConfigurations(db: Pool, installationId: number, autho
 
 export async function listAudit(db: Pool, installationId: number, authorizedIds: number[]) {
   return (await db.query(`SELECT * FROM github_audit WHERE installation_id=$1 AND
-    (repository_id IS NULL OR repository_id=ANY($2::bigint[])) ORDER BY id DESC LIMIT 100`, [installationId, authorizedIds])).rows;
+    repository_id=ANY($2::bigint[]) ORDER BY id DESC LIMIT 100`, [installationId, authorizedIds])).rows;
 }
