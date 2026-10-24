@@ -21,7 +21,11 @@ function stop(signal = "SIGTERM") {
   if (stopping) return;
   stopping = true;
   for (const child of children) {
-    if (!child.killed) child.kill(signal);
+    if (!child.killed) {
+      // Kill the entire npm process group, including Next.js and tsx children.
+      try { process.kill(-child.pid, signal); }
+      catch (error) { if (error.code !== "ESRCH") console.error("[dev:all] stop failed:", error); }
+    }
   }
 }
 
