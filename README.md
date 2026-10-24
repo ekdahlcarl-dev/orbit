@@ -21,7 +21,7 @@ npm run db:migrate
 npm run dev
 ```
 
-Open `http://localhost:3000`. Operational endpoints:
+The `dev:all` command starts PostgreSQL, applies migrations, and launches Next.js on port 3001 plus the background worker. It requires Node.js 20.6+ and a configured `.env.local`. Stop both processes with Ctrl+C. The PostgreSQL container stays running until you stop it with `docker compose stop postgres`.\n\nOpen `http://localhost:3001`. Operational endpoints:
 
 - `GET /api/health` — process + PostgreSQL health
 - `GET /api/telemetry` — OpenTelemetry baseline configuration status

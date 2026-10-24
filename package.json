@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:all": "node --env-file=.env.local scripts/dev-all.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
