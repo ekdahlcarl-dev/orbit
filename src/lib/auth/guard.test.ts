@@ -14,7 +14,9 @@ function setEnv(publicUrl: string | undefined, codespaces: string | undefined, n
   else process.env.ORBIT_PUBLIC_URL = publicUrl;
   if (codespaces === undefined) delete process.env.CODESPACES;
   else process.env.CODESPACES = codespaces;
-  process.env.NODE_ENV = nodeEnv;
+  // Node's typings expose NODE_ENV as read-only; replace via the mutable env index.
+  const env: Record<string, string | undefined> = process.env;
+  env["NODE_ENV"] = nodeEnv;
 }
 function check(origin?: string) {
   requireSameOrigin(new Request("http://localhost:3001/api/builds/manual", {
