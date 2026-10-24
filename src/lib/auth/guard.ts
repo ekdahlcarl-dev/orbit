@@ -11,7 +11,19 @@ export async function requireGithubSession(request: Request): Promise<GithubIden
 export function requireSameOrigin(request: Request): void {
   const origin = request.headers.get("origin");
   const publicUrl = process.env.ORBIT_PUBLIC_URL;
-  if (!origin || !publicUrl || origin !== new URL(publicUrl).origin) {
+  if (!origin || !publicUrl) {
+    throw new IntegrationError(403, "Cross-origin request rejected");
+  }
+  const expectedOrigin = new URL(publicUrl).origin;
+  // Codespaces can rewrite the browser Origin to the local forwarded port.
+  // Allow only the explicit development proxy case; never in production.
+  const codespacesLocalOrigin =
+    process.env.CODESPACES === "true" &&
+    process.env.NODE_ENV === "development" &&
+    /^https:\/\/[a-z0-9-]+-3001\.app\.github\.dev$/.test(expectedOrigin) &&
+    origin === "http://localhost:3001";
+
+  if (origin !== expectedOrigin && !codespacesLocalOrigin) {
     throw new IntegrationError(403, "Cross-origin request rejected");
   }
 }
