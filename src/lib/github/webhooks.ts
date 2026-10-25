@@ -9,7 +9,28 @@ import { registerArtifact } from "../evidence";
 
 const payloadSchema=z.object({action:z.string().max(100).optional(),installation:z.object({id:idSchema}),repository:z.object({id:idSchema}).optional(),repositories_removed:z.array(z.object({id:idSchema})).optional(),workflow_run:z.object({id:idSchema,workflow_id:idSchema,head_sha:z.string(),status:z.string(),conclusion:z.string().nullable(),run_attempt:z.number().optional()}).optional(),ref:z.string().max(1024).optional(),after:z.string().max(64).optional()});
 
-export async function receiveWebhook(db:Pool,request:Request,env:EnvironmentInput=process.env){const body=await readLimitedBody(request,1024*1024);verifySignature(body,request.headers.get("x-hub-signature-256"),env);const deliveryId=request.headers.get("x-github-delivery");if(!deliveryId||!/^[a-zA-Z0-9-]{1,100}$/.test(deliveryId))throw new IntegrationError(400,"Invalid delivery ID");const event=request.headers.get("x-github-event")??"";if(!["ping","installation","installation_repositories","push","workflow_run"].includes(event))return{ignored:true};if(event==="ping")return{ping:true};const data=payloadSchema.parse(JSON.parse(body.toString("utf8")));requireInstallation(data.installation.id,env);if(["push","workflow_run"].includes(event)&&!data.repository)throw new IntegrationError(400,"Repository identity required");return transaction(db,async client=>{if(data.repository){const authorized=await client.query(`SELECT 1 FROM github_repositories WHERE repository_id=$1 AND installation_id=$2 AND access_status='active'`,[data.repository.id,data.installation.id]);if(!authorized.rowCount)throw new IntegrationError(403,"Repository is not onboarded");}const inserted=await client.query(`INSERT INTO github_deliveries(delivery_id,event,installation_id,repository_id,payload) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING delivery_id`,[deliveryId,event,data.installation.id,data.repository?.id??null,data]);if(!inserted.rowCount)return{duplicate:true};await client.query("INSERT INTO job_queue(job_type,payload) VALUES ('github.webhook',$1)",[{deliveryId}]);return{accepted:true};});}
+/** Stable JSON comparison independent of object key insertion order. */
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return "["+value.map(canonicalJson).join(",")+"]";
+  if (value!==null && typeof value==="object") {
+    const record=value as Record<string,unknown>;
+    return "{"+Object.keys(record).sort().map(key=>JSON.stringify(key)+":"+canonicalJson(record[key])).join(",")+"}";
+  }
+  return JSON.stringify(value);
+}
+
+export async function receiveWebhook(db:Pool,request:Request,env:EnvironmentInput=process.env){const body=await readLimitedBody(request,1024*1024);verifySignature(body,request.headers.get("x-hub-signature-256"),env);const deliveryId=request.headers.get("x-github-delivery");if(!deliveryId||!/^[a-zA-Z0-9-]{1,100}$/.test(deliveryId))throw new IntegrationError(400,"Invalid delivery ID");const event=request.headers.get("x-github-event")??"";if(!["ping","installation","installation_repositories","push","workflow_run"].includes(event))return{ignored:true};if(event==="ping")return{ping:true};const data=payloadSchema.parse(JSON.parse(body.toString("utf8")));requireInstallation(data.installation.id,env);if(["push","workflow_run"].includes(event)&&!data.repository)throw new IntegrationError(400,"Repository identity required");return transaction(db,async client=>{if(data.repository){const authorized=await client.query(`SELECT 1 FROM github_repositories WHERE repository_id=$1 AND installation_id=$2 AND access_status='active'`,[data.repository.id,data.installation.id]);if(!authorized.rowCount)throw new IntegrationError(403,"Repository is not onboarded");}const inserted=await client.query(`INSERT INTO github_deliveries(delivery_id,event,installation_id,repository_id,payload) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING delivery_id`,[deliveryId,event,data.installation.id,data.repository?.id??null,data]);if(!inserted.rowCount){
+      const previous=await client.query("SELECT event,installation_id,repository_id,payload FROM github_deliveries WHERE delivery_id=$1",[deliveryId]);
+      const row=previous.rows[0];
+      if(!row||row.event!==event||Number(row.installation_id)!==data.installation.id||
+         (row.repository_id===null?null:Number(row.repository_id))!==(data.repository?.id??null)||
+         canonicalJson(row.payload)!==canonicalJson(data))
+        throw new IntegrationError(409,"Delivery ID reused with different payload");
+      return{duplicate:true};
+    }
+    await client.query("INSERT INTO job_queue(job_type,payload) VALUES ('github.webhook',$1)",[{deliveryId}]);
+    await client.query("INSERT INTO github_audit(actor,action,installation_id,repository_id,after_value) VALUES ('github.webhook','webhook.received',$1,$2,$3)",[data.installation.id,data.repository?.id??null,{deliveryId,event}]);
+    return{accepted:true};});}
 
 function digestOf(source:WorkflowArtifact){return source.digest?.match(/^sha256:([a-f0-9]{64})$/i)?.[1]?.toLowerCase()??null;}
 
