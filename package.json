@@ -12,7 +12,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --import tsx --test src/lib/builds.sync.test.ts src/lib/config.test.ts src/lib/evidence.test.ts src/lib/static-analysis.test.ts src/lib/confidence.test.ts src/lib/component-tests.test.ts src/lib/system-tests.test.ts src/lib/dashboard.test.ts src/lib/risk.test.ts src/lib/github/*.test.ts src/lib/recommendation-evaluation.test.ts src/lib/auth/*.test.ts",
+    "test": "node --import tsx scripts/test.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "worker": "tsx src/worker/index.ts"
   },
@@ -23,6 +23,7 @@
     "pino": "^9.9.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "saxes": "^6.0.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
@@ -35,5 +36,8 @@
     "eslint-config-next": "^15.5.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.23"
   }
 }

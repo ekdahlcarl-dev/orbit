@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { SaxesParser } from "saxes";
 import type { Pool, PoolClient } from "pg";
 
 type Database = Pool | PoolClient;
@@ -16,13 +17,13 @@ export const artifactSchema = z.object({
 }).strict();
 
 const resultSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(4096),
   status: z.enum(["passed","failed","error","skipped"]),
   durationMs: z.number().nonnegative().optional(),
-  message: z.string().optional(),
+  message: z.string().max(16384).optional(),
 }).strict();
 
-export const orbitJsonSchema = z.object({ schemaVersion: z.literal("1"), results: z.array(resultSchema).min(1) }).strict();
+export const orbitJsonSchema = z.object({ schemaVersion: z.literal("1"), results: z.array(resultSchema).min(1).max(10000) }).strict();
 export const evidenceSchema = z.object({
   buildRunId: z.coerce.number().int().positive(), artifactDigest: digestSchema.optional(),
   evidenceType: z.enum(["test","static_analysis","other"]), format: z.enum(["junit","orbit-json"]),
@@ -31,22 +32,45 @@ export const evidenceSchema = z.object({
 }).strict();
 export type NormalizedResult = z.infer<typeof resultSchema>;
 
-function decodeXml(value: string) { return value.replaceAll("&quot;", '"').replaceAll("&apos;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&"); }
-function attr(attrs: string, name: string) { const match = attrs.match(new RegExp(`\\b${name}=(?:"([^"]*)"|'([^']*)')`)); return match ? decodeXml(match[1] ?? match[2] ?? "") : undefined; }
+/** Validate XML structure before trusting test outcomes. Never resolve DTDs. */
 export function normalizeJUnit(xml: string): NormalizedResult[] {
-  if (!/<testsuites?\b|<testcase\b/.test(xml)) throw new Error("Invalid JUnit XML: no test suite or testcase");
+  if (Buffer.byteLength(xml, "utf8") > 5_000_000) throw new Error("JUnit report too large");
+  const parser = new SaxesParser({ xmlns: false });
+  const stack: string[] = [];
   const results: NormalizedResult[] = [];
-  const cases = xml.matchAll(/<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g);
-  for (const match of cases) {
-    const attrs = match[1]; const body = match[2] ?? ""; const name = attr(attrs, "name");
-    if (!name) throw new Error("Invalid JUnit XML: testcase name is required");
-    const seconds = Number(attr(attrs, "time") ?? "0"); if (!Number.isFinite(seconds) || seconds < 0) throw new Error("Invalid JUnit XML: testcase time");
-    const failure = body.match(/<failure\b([^>]*)>/); const error = body.match(/<error\b([^>]*)>/); const skipped = /<skipped\b/.test(body);
-    const status = error ? "error" : failure ? "failed" : skipped ? "skipped" : "passed"; const marker = error ?? failure;
-    results.push({ name, status, durationMs: seconds * 1000, ...(marker && attr(marker[1], "message") ? { message: attr(marker[1], "message") } : {}) });
-  }
-  if (!results.length) throw new Error("Invalid JUnit XML: no testcases"); return results;
+  let current: NormalizedResult | undefined;
+  parser.on("doctype", () => { throw new Error("JUnit DTDs are prohibited"); });
+  parser.on("opentag", node => {
+    const parent = stack.at(-1);
+    if (!parent && !["testsuites", "testsuite", "testcase"].includes(node.name)) throw new Error("Invalid JUnit root");
+    if (stack.length >= 64) throw new Error("JUnit nesting limit exceeded");
+    if (node.name === "testcase") {
+      if (current || (parent && parent !== "testsuite")) throw new Error("Invalid JUnit testcase structure");
+      const name = node.attributes.name;
+      if (!name || name.length > 4096) throw new Error("Invalid JUnit XML: testcase name is required or too long");
+      const seconds = Number(node.attributes.time ?? "0");
+      if (!Number.isFinite(seconds * 1000) || seconds < 0) throw new Error("Invalid JUnit XML: testcase time");
+      if (results.length >= 10000) throw new Error("JUnit testcase limit exceeded");
+      current = { name, status: "passed", durationMs: seconds * 1000 };
+    }
+    if (["failure", "error", "skipped"].includes(node.name)) {
+      if (!current || parent !== "testcase") throw new Error("Invalid JUnit outcome structure");
+      if (node.name === "error") current.status = "error";
+      else if (node.name === "failure" && current.status !== "error") current.status = "failed";
+      else if (node.name === "skipped" && current.status === "passed") current.status = "skipped";
+      if (node.attributes.message) current.message = node.attributes.message.slice(0, 16384);
+    }
+    stack.push(node.name);
+  });
+  parser.on("closetag", node => {
+    if (node.name === "testcase" && current) { results.push(current); current = undefined; }
+    stack.pop();
+  });
+  parser.write(xml).close();
+  if (!results.length) throw new Error("Invalid JUnit XML: no testcases");
+  return results;
 }
+
 export function normalizeEvidence(format: "junit" | "orbit-json", content: string): NormalizedResult[] { if (format === "junit") return normalizeJUnit(content); return orbitJsonSchema.parse(JSON.parse(content)).results; }
 function summary(results: NormalizedResult[]) { const counts = { passed: 0, failed: 0, error: 0, skipped: 0 }; for (const result of results) counts[result.status]++; const status = counts.error ? "error" : counts.failed ? "failed" : counts.passed ? "passed" : "skipped"; return { status, summary: { total: results.length, ...counts, results } } as const; }
 

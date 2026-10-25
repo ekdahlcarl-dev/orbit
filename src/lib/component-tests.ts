@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+type Database = Pool | PoolClient;
 import { configureConfidenceRequirement, recordConfidenceEvidence } from "./confidence";
 
 const testCaseSchema = z.object({
@@ -64,7 +65,7 @@ export function toConfidenceState(state: ComponentSuiteState) {
   return state;
 }
 
-export async function configureComponentSuite(db: Pool, raw: unknown) {
+export async function configureComponentSuite(db: Database, raw: unknown) {
   const input = componentRequirementSchema.parse(raw);
   const row = (await db.query(
     `INSERT INTO component_test_requirements(repository_id,component_key,suite_key,required,enabled,max_age_minutes)
@@ -86,7 +87,7 @@ export async function configureComponentSuite(db: Pool, raw: unknown) {
   return row;
 }
 
-export async function ingestComponentSuite(db: Pool, raw: unknown) {
+export async function ingestComponentSuite(db: Database, raw: unknown) {
   const input = componentTestInputSchema.parse(raw);
   const artifactResult = await db.query("SELECT id,build_run_id,repository_id,commit_sha FROM artifacts WHERE id=$1", [input.artifactId]);
   if (!artifactResult.rowCount) throw new Error("Artifact does not exist");
@@ -130,7 +131,7 @@ export async function ingestComponentSuite(db: Pool, raw: unknown) {
   return { result, confidence };
 }
 
-export async function listComponentSuites(db: Pool, artifactId: number) {
+export async function listComponentSuites(db: Database, artifactId: number) {
   return (await db.query(
     `SELECT * FROM component_test_results WHERE artifact_id=$1 ORDER BY component_key,suite_key,observed_at DESC,id DESC`,
     [artifactId],

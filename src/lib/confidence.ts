@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+type Database = Pool | PoolClient;
 import { getLevel1Assessment, type Level1State } from "./static-analysis";
 
 export type ConfidenceState = "not-configured" | "pending" | "running" | "passed" | "failed" | "blocked" | "stale";
@@ -57,7 +58,7 @@ export function determineConfidenceLevel(level1: ConfidenceState, level2: Confid
   return 3;
 }
 
-export async function configureConfidenceRequirement(db: Pool, raw: unknown) {
+export async function configureConfidenceRequirement(db: Database, raw: unknown) {
   const input = confidenceRequirementSchema.parse(raw);
   return (await db.query(
     `INSERT INTO confidence_requirements(repository_id,level,key,required,enabled,max_age_minutes)
@@ -69,7 +70,7 @@ export async function configureConfidenceRequirement(db: Pool, raw: unknown) {
   )).rows[0];
 }
 
-export async function recordConfidenceEvidence(db: Pool, raw: unknown) {
+export async function recordConfidenceEvidence(db: Database, raw: unknown) {
   const input = confidenceEvidenceSchema.parse(raw);
   const artifact = await db.query("SELECT id,build_run_id,repository_id FROM artifacts WHERE id=$1", [input.artifactId]);
   if (!artifact.rowCount) throw new Error("Artifact does not exist");
@@ -94,7 +95,7 @@ export async function recordConfidenceEvidence(db: Pool, raw: unknown) {
   return recalculateConfidence(db, input.artifactId);
 }
 
-async function loadConfiguredLevel(db: Pool, artifactId: number, repositoryId: number, level: 2 | 3) {
+async function loadConfiguredLevel(db: Database, artifactId: number, repositoryId: number, level: 2 | 3) {
   const requirementsResult = await db.query(
     "SELECT key,required,max_age_minutes FROM confidence_requirements WHERE repository_id=$1 AND level=$2 AND enabled=true ORDER BY key",
     [repositoryId, level],
@@ -109,7 +110,7 @@ async function loadConfiguredLevel(db: Pool, artifactId: number, repositoryId: n
   };
 }
 
-export async function recalculateConfidence(db: Pool, artifactId: number, now = new Date()) {
+export async function recalculateConfidence(db: Database, artifactId: number, now = new Date()) {
   const artifactResult = await db.query(
     "SELECT id,build_run_id,repository_id,commit_sha FROM artifacts WHERE id=$1",
     [artifactId],
@@ -166,6 +167,6 @@ export async function recalculateConfidence(db: Pool, artifactId: number, now = 
   )).rows[0];
 }
 
-export async function getConfidenceHistory(db: Pool, artifactId: number) {
+export async function getConfidenceHistory(db: Database, artifactId: number) {
   return (await db.query("SELECT * FROM confidence_transitions WHERE artifact_id=$1 ORDER BY created_at,id", [artifactId])).rows;
 }

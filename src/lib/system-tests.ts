@@ -1,15 +1,29 @@
 import { z } from "zod";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+type Database = Pool | PoolClient;
 import { configureConfidenceRequirement, recordConfidenceEvidence } from "./confidence";
 
 const metadataSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));
+// Configuration is client-visible metadata, never a credential store. Adapters
+// resolve named environment variables server-side when credentials are needed.
+const publicConfigurationSchema = metadataSchema.refine(value => Object.entries(value).every(([key, item]) => {
+  const sensitiveKey = /password|secret|token|api[_-]?key|private[_-]?key|authorization|credential/i.test(key);
+  if (sensitiveKey && !(/Env$/.test(key) && typeof item === "string" && /^[A-Z][A-Z0-9_]*$/.test(item))) return false;
+  if (typeof item === "string" && /^https?:\/\//i.test(item)) {
+    try {
+      const url = new URL(item);
+      return !url.username && !url.password && ![...url.searchParams.keys()].some(k => /password|secret|token|key|authorization/i.test(k));
+    } catch { return false; }
+  }
+  return true;
+}), "Store credentials in environment variables, not provider configuration");
 
 export const systemProviderSchema = z.object({
   repositoryId: z.coerce.number().int().positive(),
   providerKey: z.string().min(1).max(128),
   adapterKey: z.string().min(1).max(128),
   enabled: z.boolean().default(true),
-  config: metadataSchema.default({}),
+  config: publicConfigurationSchema.default({}),
 }).strict();
 
 export const systemEnvironmentSchema = z.object({
@@ -18,7 +32,7 @@ export const systemEnvironmentSchema = z.object({
   environmentKey: z.string().min(1).max(128),
   environmentType: z.enum(["virtual", "hardware"]),
   enabled: z.boolean().default(true),
-  configuration: metadataSchema.default({}),
+  configuration: publicConfigurationSchema.default({}),
 }).strict();
 
 export const systemRequirementSchema = z.object({
@@ -63,7 +77,7 @@ export function toSystemConfidenceState(state: z.infer<typeof systemRunSchema>["
   return "failed" as const;
 }
 
-export async function registerSystemProvider(db: Pool, raw: unknown) {
+export async function registerSystemProvider(db: Database, raw: unknown) {
   const input = systemProviderSchema.parse(raw);
   return (await db.query(
     `INSERT INTO system_test_providers(repository_id,provider_key,adapter_key,enabled,config)
@@ -74,7 +88,7 @@ export async function registerSystemProvider(db: Pool, raw: unknown) {
   )).rows[0];
 }
 
-export async function registerSystemEnvironment(db: Pool, raw: unknown) {
+export async function registerSystemEnvironment(db: Database, raw: unknown) {
   const input = systemEnvironmentSchema.parse(raw);
   const provider = await db.query("SELECT id FROM system_test_providers WHERE repository_id=$1 AND provider_key=$2", [input.repositoryId,input.providerKey]);
   if (!provider.rowCount) throw new Error("System test provider does not exist");
@@ -87,7 +101,7 @@ export async function registerSystemEnvironment(db: Pool, raw: unknown) {
   )).rows[0];
 }
 
-export async function configureSystemSuite(db: Pool, raw: unknown) {
+export async function configureSystemSuite(db: Database, raw: unknown) {
   const input = systemRequirementSchema.parse(raw);
   const row = (await db.query(
     `INSERT INTO system_test_requirements(repository_id,provider_key,environment_key,suite_key,required,enabled,max_age_minutes)
@@ -100,7 +114,7 @@ export async function configureSystemSuite(db: Pool, raw: unknown) {
   return row;
 }
 
-export async function recordSystemTestRun(db: Pool, raw: unknown) {
+export async function recordSystemTestRun(db: Database, raw: unknown) {
   const input = systemRunSchema.parse(raw);
   const artifactResult = await db.query("SELECT id,build_run_id,repository_id,commit_sha,digest FROM artifacts WHERE id=$1", [input.artifactId]);
   if (!artifactResult.rowCount) throw new Error("Artifact does not exist");
@@ -138,9 +152,9 @@ export async function recordSystemTestRun(db: Pool, raw: unknown) {
   return { result, confidence };
 }
 
-export async function listSystemTestRuns(db: Pool, artifactId: number) {
+export async function listSystemTestRuns(db: Database, artifactId: number) {
   return (await db.query(
-    `SELECT r.*,p.provider_key,p.adapter_key,e.environment_key,e.environment_type,e.configuration
+    `SELECT r.*,p.provider_key,p.adapter_key,e.environment_key,e.environment_type
      FROM system_test_runs r JOIN system_test_providers p ON p.id=r.provider_id JOIN system_test_environments e ON e.id=r.environment_id
      WHERE r.artifact_id=$1 ORDER BY r.observed_at DESC,r.id DESC`, [artifactId],
   )).rows;

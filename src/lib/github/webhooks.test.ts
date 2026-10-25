@@ -18,7 +18,7 @@ function request(payload: unknown, delivery = "delivery-1", event = "push", sign
 }
 
 function mockDatabase() {
-  const deliveries = new Map<string, { event: string; installation_id: number; repository_id: number | null; payload: unknown }>();
+  const deliveries = new Map<string, { event: string; installation_id: number | null; repository_id: number | null; payload: unknown; payload_fingerprint: unknown }>();
   const audit: unknown[] = [];
   const queue: unknown[] = [];
   const client = {
@@ -28,10 +28,10 @@ function mockDatabase() {
       if (sql.includes("INSERT INTO github_deliveries")) {
         const id = String(args[0]);
         if (deliveries.has(id)) return { rows: [], rowCount: 0 };
-        deliveries.set(id, { event: String(args[1]), installation_id: Number(args[2]), repository_id: args[3] === null ? null : Number(args[3]), payload: args[4] });
+        deliveries.set(id, { event: String(args[1]), installation_id: args[2] === null ? null : Number(args[2]), repository_id: args[3] === null ? null : Number(args[3]), payload: args[4], payload_fingerprint: args[6] });
         return { rows: [{ delivery_id: id }], rowCount: 1 };
       }
-      if (sql.includes("SELECT event,installation_id,repository_id,payload FROM github_deliveries")) {
+      if (sql.includes("SELECT event,installation_id,repository_id,payload,payload_fingerprint FROM github_deliveries")) {
         const item = deliveries.get(String(args[0]));
         return { rows: item ? [item] : [], rowCount: item ? 1 : 0 };
       }
@@ -70,4 +70,32 @@ test("bad signature and invalid installation fail before database writes", async
   await assert.rejects(() => receiveWebhook(db, request({ ...base, installation: { id: 999 } }), env), { status: 403 });
   assert.equal(queue.length, 0);
   assert.equal(audit.length, 0);
+});
+
+test("conflicting signed fields outside the processing schema are rejected", async () => {
+  const { db } = mockDatabase();
+  await receiveWebhook(db, request({ ...base, sender: { id: 1 } }), env);
+  await assert.rejects(() => receiveWebhook(db, request({ ...base, sender: { id: 2 } }), env), { status: 409 });
+});
+test("ping and ignored events are authorized, audited and replay protected without jobs", async () => {
+  for (const event of ["ping", "issues"]) {
+    const { db, queue, audit } = mockDatabase();
+    await receiveWebhook(db, request(base, "delivery-1", event), env);
+    assert.deepEqual(await receiveWebhook(db, request(base, "delivery-1", event), env), { duplicate: true });
+    await assert.rejects(() => receiveWebhook(db, request({ ...base, after: "changed" }, "delivery-1", event), env), { status: 409 });
+    await assert.rejects(() => receiveWebhook(db, request({ installation: { id: 999 } }, "delivery-2", event), env), { status: 403 });
+    assert.equal(queue.length, 0);
+    assert.equal(audit.length, 1);
+  }
+});
+
+test("app-level ping without installation requires signed matching app identity", async () => {
+  const { db, queue, audit } = mockDatabase();
+  const configured = { ...env, GITHUB_APP_ID: "123" };
+  assert.deepEqual(await receiveWebhook(db, request({ hook: { app_id: 123 }, zen: "hello" }, "app-ping", "ping"), configured), { ping: true });
+  assert.deepEqual(await receiveWebhook(db, request({ hook: { app_id: 123 }, zen: "hello" }, "app-ping", "ping"), configured), { duplicate: true });
+  await assert.rejects(receiveWebhook(db, request({ hook: { app_id: 999 } }, "bad-ping", "ping"), configured), { status: 403 });
+  await assert.rejects(receiveWebhook(db, request({ zen: "no identity" }, "bad-ping", "ping"), configured), { status: 403 });
+  assert.equal(queue.length, 0);
+  assert.equal(audit.length, 1);
 });

@@ -1,3 +1,4 @@
+import { transaction } from "@/lib/github/store";
 import { requireAccess } from "@/lib/auth/rbac";
 import { requireSameOrigin } from "@/lib/auth/guard";
 import { getDb } from "@/lib/db";
@@ -48,10 +49,14 @@ export async function POST(request: Request) {
     if (!repository || repository.archived) return json({ error: "Repository is not available for this installation" }, 403);
 
     const db = getDb();
-    const result = await db.query(
-      "INSERT INTO orbit_repository_grants (github_user_id,repository_id) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING repository_id",
-      [identity.id, repositoryId],
-    );
-    return json({ repositoryId, granted: true, created: Boolean(result.rowCount) });
+    const created = await transaction(db, async client => {
+      await client.query("SELECT set_config('orbit.actor', $1, true)", [`github:${identity.id}:${identity.login}`]);
+      const result = await client.query(
+        "INSERT INTO orbit_repository_grants (github_user_id,repository_id) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING repository_id",
+        [identity.id, repositoryId],
+      );
+      return Boolean(result.rowCount);
+    });
+    return json({ repositoryId, granted: true, created });
   } catch (error) { return errorResponse(error); }
 }

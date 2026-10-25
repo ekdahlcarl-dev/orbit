@@ -11,7 +11,8 @@ export function parseCookie(header: string | null, name: string): string | undef
   const matches = header.split(";").map(item => item.trim()).filter(item => item.startsWith(name + "="));
   if (matches.length !== 1) return undefined;
   const value = matches[0].slice(name.length + 1);
-  return /^[A-Za-z0-9_-]{43}$/.test(value) ? value : undefined;
+  const format = name === "orbit_oauth_state" ? /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/ : /^[A-Za-z0-9_-]{43}$/;
+  return value.length <= 2048 && format.test(value) ? value : undefined;
 }
 export async function registerOAuthState(nonce: string, expiresAt: number): Promise<void> {
   await getDb().query("INSERT INTO orbit_oauth_states(nonce_hash,expires_at) VALUES($1,$2)", [digest(nonce), new Date(expiresAt)]);

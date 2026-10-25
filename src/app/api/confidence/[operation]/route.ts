@@ -1,3 +1,4 @@
+import { withAuditActor } from "@/lib/auth/audit";
 import { requireAccess, requireResourceAccess } from "@/lib/auth/rbac";
 import { requireSameOrigin } from "@/lib/auth/guard";
 import { getDb } from "@/lib/db";
@@ -11,20 +12,19 @@ type Context = { params: Promise<{ operation: string }> };
 
 export async function POST(request: Request, context: Context) {
   try {
-    await requireAccess(request, "read");
+    const { identity } = await requireAccess(request, "read");
     requireSameOrigin(request);
     const { operation } = await context.params;
     const body = JSON.parse((await readLimitedBody(request, 1_000_000)).toString("utf8"));
     if (operation === "configure") await requireAccess(request, "configuration_write", Number(body.repositoryId));
     else if (operation === "evidence" || operation === "recalculate") await requireResourceAccess(request, "configuration_write", "artifact", Number(body.artifactId));
     else return json({ error: "Not found" }, 404);
-    if (operation === "configure") return json(await configureConfidenceRequirement(getDb(), body), 201);
-    if (operation === "evidence") return json(await recordConfidenceEvidence(getDb(), body), 201);
+    if (operation === "configure") return json(await withAuditActor(getDb(), identity, client => configureConfidenceRequirement(client, body)), 201);
+    if (operation === "evidence") return json(await withAuditActor(getDb(), identity, client => recordConfidenceEvidence(client, body)), 201);
     if (operation === "recalculate") {
       const artifactId = Number(body.artifactId);
       if (!Number.isInteger(artifactId) || artifactId <= 0) return json({ error: "Invalid artifactId" }, 400);
-    await requireResourceAccess(request, "read", "artifact", artifactId);
-      return json(await recalculateConfidence(getDb(), artifactId));
+      return json(await withAuditActor(getDb(), identity, client => recalculateConfidence(client, artifactId)));
     }
     return json({ error: "Not found" }, 404);
   } catch (error) {
@@ -37,6 +37,7 @@ export async function GET(request: Request, context: Context) {
     const { operation } = await context.params;
     const artifactId = Number(new URL(request.url).searchParams.get("artifactId"));
     if (!Number.isInteger(artifactId) || artifactId <= 0) return json({ error: "Invalid artifactId" }, 400);
+    await requireResourceAccess(request, "read", "artifact", artifactId);
     if (operation === "status") return json(await recalculateConfidence(getDb(), artifactId));
     if (operation === "history") return json(await getConfidenceHistory(getDb(), artifactId));
     return json({ error: "Not found" }, 404);

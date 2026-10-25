@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+type Database = Pool | PoolClient;
 
 export type Level1State = "not-configured" | "pending" | "running" | "failed" | "passed";
 export type GateState = Exclude<Level1State, "not-configured">;
@@ -86,7 +87,7 @@ export function determineLevel1(requiredStates: Array<GateState | null>): Level1
   return "passed";
 }
 
-export async function configureStaticAnalysis(db: Pool, raw: unknown) {
+export async function configureStaticAnalysis(db: Database, raw: unknown) {
   const input = requirementSchema.parse(raw);
   return (await db.query(
     `INSERT INTO static_analysis_requirements(repository_id,provider,required,enabled)
@@ -98,7 +99,7 @@ export async function configureStaticAnalysis(db: Pool, raw: unknown) {
   )).rows[0];
 }
 
-export async function ingestStaticAnalysis(db: Pool, provider: string, raw: unknown) {
+export async function ingestStaticAnalysis(db: Database, provider: string, raw: unknown) {
   const adapter = provider === "sonar" ? sonarAdapter : null;
   if (!adapter) throw new Error(`Unsupported static analysis provider: ${provider}`);
   const result = adapter.normalize(raw);
@@ -140,7 +141,7 @@ export async function ingestStaticAnalysis(db: Pool, provider: string, raw: unkn
   )).rows[0];
 }
 
-export async function getLevel1Assessment(db: Pool, buildRunId: number) {
+export async function getLevel1Assessment(db: Database, buildRunId: number) {
   const run = await db.query("SELECT id,repository_id,commit_sha FROM build_runs WHERE id=$1", [buildRunId]);
   if (!run.rowCount) throw new Error("BuildRun does not exist");
   const build = run.rows[0];

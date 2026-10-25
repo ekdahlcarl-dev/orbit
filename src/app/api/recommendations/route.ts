@@ -1,3 +1,4 @@
+import { readLimitedBody } from "@/lib/github/security";
 import { getDb } from "@/lib/db";
 import { errorResponse, json } from "@/lib/github/http";
 import { requireAccess } from "@/lib/auth/rbac";
@@ -56,8 +57,7 @@ export async function POST(request:Request) {
  try {
   await requireAccess(request,"read");
   requireSameOrigin(request);
-  if(Number(request.headers.get("content-length"))>8192)return json({error:"Request too large"},413);
-  const parsed=command.safeParse(await request.json());
+  const parsed=command.safeParse(JSON.parse((await readLimitedBody(request, 8192)).toString("utf8")));
   if(!parsed.success)return json({error:"Invalid workflow request"},400);
   const input=parsed.data;
   const access=await requireAccess(request,input.type==="seed"?"configuration_write":"recommendation_decide",input.repositoryId);
