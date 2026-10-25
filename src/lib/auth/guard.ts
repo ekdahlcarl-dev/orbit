@@ -21,7 +21,7 @@ export function requireSameOrigin(request: Request): void {
     process.env.CODESPACES === "true" &&
     process.env.NODE_ENV === "development" &&
     /^https:\/\/[a-z0-9-]+-3001\.app\.github\.dev$/.test(expectedOrigin) &&
-    origin === "http://localhost:3001";
+    (origin === "http://localhost:3001" || origin === "https://localhost:3001");
 
   if (origin !== expectedOrigin && !codespacesLocalOrigin) {
     throw new IntegrationError(403, "Cross-origin request rejected");
