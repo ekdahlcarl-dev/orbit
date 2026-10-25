@@ -9,9 +9,9 @@ export interface WorkflowArtifact { id: number; name: string; size_in_bytes: num
 export class GitHubClient {
   constructor(private transport: typeof fetch = fetch, private env: EnvironmentInput = process.env) {}
 
-  private async response(path: string, token: string, body?: object): Promise<Response> {
+  private async response(path: string, token: string, body?: object, method?: "PATCH"): Promise<Response> {
     const response = await this.transport(`https://api.github.com${path}`, {
-      method: body ? "POST" : "GET",
+      method: method ?? (body ? "POST" : "GET"),
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10000),
@@ -103,6 +103,24 @@ export class GitHubClient {
     const { token, root } = await this.repositoryContext(installationId, repositoryId);
     const refName = ref.replace(/^(heads|tags)\//, "");
     await this.response(`${root}/actions/workflows/${workflowId}/dispatches`, token, { ref: refName });
+  }
+
+  async openPullRequests(installationId: number, repositoryId: number) {
+    const { root } = await this.repositoryContext(installationId, repositoryId);
+    const credentials = await this.request<{ token: string }>(`/app/installations/${installationId}/access_tokens`, appJwt(this.env), {
+      repository_ids: [repositoryId], permissions: { pull_requests: "read" },
+    });
+    return this.pages<{ number: number; head: { sha: string; repo: { id: number } | null }; base: { ref: string } }>(`${root}/pulls`, credentials.token);
+  }
+
+  async publishMergeGate(installationId: number, repositoryId: number, body: object, checkRunId?: number) {
+    // Request Checks permission only for merge gating; existing integrations keep their original token scope.
+    const { root } = await this.repositoryContext(installationId, repositoryId);
+    const credentials = await this.request<{ token: string }>(`/app/installations/${installationId}/access_tokens`, appJwt(this.env), {
+      repository_ids: [repositoryId], permissions: { checks: "write" },
+    });
+    const path = `${root}/check-runs${checkRunId ? `/${checkRunId}` : ""}`;
+    return (await this.response(path, credentials.token, body, checkRunId ? "PATCH" : undefined)).json() as Promise<{ id: number; html_url: string }>;
   }
 
   async workflowArtifacts(installationId: number, repositoryId: number, runId: number): Promise<WorkflowArtifact[]> {

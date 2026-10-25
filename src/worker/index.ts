@@ -1,3 +1,4 @@
+import { refreshMergeGates } from "../lib/merge-gates";
 import { getDb } from "../lib/db";
 import { logger } from "../lib/logger";
 import { processWebhook } from "../lib/github/webhooks";
@@ -8,6 +9,12 @@ export async function runWorkerIteration(db = getDb(), github = new GitHubClient
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+    // A separate savepoint keeps GitHub outages from blocking build/webhook jobs.
+    if ((await client.query("SELECT pg_try_advisory_xact_lock(160016) AS locked")).rows[0].locked) {
+      await client.query("SAVEPOINT merge_gates");
+      try { await refreshMergeGates(client, github); }
+      catch (error) { await client.query("ROLLBACK TO SAVEPOINT merge_gates"); logger.error({ err: error }, "merge gate refresh failed; retry next iteration"); }
+    }
     await enqueueDueSchedules(client);
     const result = await client.query(`SELECT id,job_type,payload,attempts FROM job_queue WHERE status='queued' AND available_at<=now() ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED`);
     if (!result.rowCount) { await client.query("COMMIT"); return; }
