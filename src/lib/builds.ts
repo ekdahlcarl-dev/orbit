@@ -26,10 +26,26 @@ export async function queuePushBuild(client:PoolClient,installationId:number,rep
 
 export async function syncWorkflowRun(client:PoolClient,installationId:number,repositoryId:number,workflowRun:{id:number;workflow_id:number;head_sha:string;status:string;conclusion:string|null}){
   const mapped=workflowRun.status==="completed"?(workflowRun.conclusion==="success"?"succeeded":workflowRun.conclusion==="cancelled"?"canceled":"failed"):workflowRun.status==="in_progress"?"running":"queued";
-  const existing=await client.query("SELECT id FROM build_runs WHERE github_run_id=$1",[workflowRun.id]);let id=existing.rows[0]?.id;
-  if(!id){const candidate=await client.query(`SELECT id FROM build_runs WHERE repository_id=$1 AND installation_id=$2 AND workflow_id=$3 AND commit_sha=$4 AND github_run_id IS NULL ORDER BY requested_at DESC LIMIT 1 FOR UPDATE`,[repositoryId,installationId,workflowRun.workflow_id,workflowRun.head_sha]);id=candidate.rows[0]?.id;}
+
+  // Prefer the durable GitHub run ID. A workflow event may be redelivered or arrive out of order.
+  const existing=await client.query(
+    "SELECT id FROM build_runs WHERE github_run_id=$1 AND repository_id=$2 AND installation_id=$3 FOR UPDATE",
+    [workflowRun.id,repositoryId,installationId]
+  );
+  let id=existing.rows[0]?.id;
+  if(!id){
+    // Dispatch does not return a run ID. Claim at most one pending build for this
+    // commit; never mark every unmatched build succeeded based on a shared SHA.
+    const candidate=await client.query(
+      `SELECT id FROM build_runs WHERE repository_id=$1 AND installation_id=$2 AND workflow_id=$3 AND commit_sha=$4 AND github_run_id IS NULL AND status='queued' ORDER BY requested_at ASC,id ASC LIMIT 1 FOR UPDATE SKIP LOCKED`,
+      [repositoryId,installationId,workflowRun.workflow_id,workflowRun.head_sha]
+    );
+    id=candidate.rows[0]?.id;
+  }
   if(!id)return null;
-  await client.query(`UPDATE build_runs SET github_run_id=$2,status=$3,started_at=CASE WHEN $3='running' THEN COALESCE(started_at,now()) ELSE started_at END,completed_at=CASE WHEN $3 IN ('succeeded','failed','canceled') THEN COALESCE(completed_at,now()) ELSE completed_at END,updated_at=now() WHERE id=$1`,[id,workflowRun.id,mapped]);
-  if(["succeeded","failed","canceled"].includes(mapped)){await client.query(`UPDATE build_runs SET status=$5,completed_at=COALESCE(completed_at,now()),updated_at=now() WHERE repository_id=$1 AND installation_id=$2 AND workflow_id=$3 AND commit_sha=$4 AND github_run_id IS NULL AND status IN ('queued','running')`,[repositoryId,installationId,workflowRun.workflow_id,workflowRun.head_sha,mapped]);}
+  await client.query(
+    `UPDATE build_runs SET github_run_id=$2,status=$3,started_at=CASE WHEN $3='running' THEN COALESCE(started_at,now()) ELSE started_at END,completed_at=CASE WHEN $3 IN ('succeeded','failed','canceled') THEN COALESCE(completed_at,now()) ELSE completed_at END,updated_at=now() WHERE id=$1`,
+    [id,workflowRun.id,mapped]
+  );
   return {buildRunId:Number(id),status:mapped};
 }
