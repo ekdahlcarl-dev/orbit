@@ -10,6 +10,7 @@ test("OAuth state verifies once within expiry window and rejects tampering", () 
   assert.equal(verifyOAuthState(state + "x", secret, 1001), null);
   assert.equal(verifyOAuthState(state, "b".repeat(48), 1001), null);
   assert.equal(verifyOAuthState("invalid", secret, 1001), null);
+  assert.equal(verifyOAuthState("x".repeat(100_000), secret, 1001), null);
 });
 test("OAuth state requires a strong secret", () => {
   assert.throws(() => createOAuthState("weak"), /secret/);

@@ -6,8 +6,12 @@ export const AUTH_COOKIE = "orbit_session";
 const SESSION_MS = 8 * 60 * 60 * 1000;
 export function digest(value: string): string { return createHash("sha256").update(value).digest("hex"); }
 export function parseCookie(header: string | null, name: string): string | undefined {
-  const item = header?.split(";").map(s => s.trim()).find(s => s.startsWith(name + "="));
-  return item?.slice(name.length + 1);
+  if (!header || header.length > 8192) return undefined;
+  // Duplicate session cookies are ambiguous across paths/domains. Fail closed.
+  const matches = header.split(";").map(item => item.trim()).filter(item => item.startsWith(name + "="));
+  if (matches.length !== 1) return undefined;
+  const value = matches[0].slice(name.length + 1);
+  return /^[A-Za-z0-9_-]{43}$/.test(value) ? value : undefined;
 }
 export async function registerOAuthState(nonce: string, expiresAt: number): Promise<void> {
   await getDb().query("INSERT INTO orbit_oauth_states(nonce_hash,expires_at) VALUES($1,$2)", [digest(nonce), new Date(expiresAt)]);

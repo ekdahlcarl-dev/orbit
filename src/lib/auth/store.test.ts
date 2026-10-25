@@ -9,7 +9,18 @@ test("session and OAuth state digests do not expose bearer values", () => {
   assert.equal(digest(value), digest(value));
 });
 test("cookie parser extracts exact name and does not accept prefix collisions", () => {
-  assert.equal(parseCookie("orbit_session_extra=bad; orbit_session=good", "orbit_session"), "good");
+  const token = "A".repeat(43);
+  assert.equal(parseCookie(`orbit_session_extra=bad; orbit_session=${token}`, "orbit_session"), token);
   assert.equal(parseCookie("orbit_session_extra=bad", "orbit_session"), undefined);
   assert.equal(parseCookie(null, "orbit_session"), undefined);
+});
+
+test("session cookie parser rejects duplicates and malformed values", () => {
+  const token = "A".repeat(43);
+  const other = "B".repeat(43);
+  assert.equal(parseCookie(`orbit_session=${token}; orbit_session=${other}`, "orbit_session"), undefined);
+  assert.equal(parseCookie(`orbit_session=${token}; orbit_session=`, "orbit_session"), undefined);
+  assert.equal(parseCookie("orbit_session=bad", "orbit_session"), undefined);
+  assert.equal(parseCookie(`orbit_session=${token}%3B`, "orbit_session"), undefined);
+  assert.equal(parseCookie(`orbit_session=${token}; other=${"X".repeat(8192)}`, "orbit_session"), undefined);
 });

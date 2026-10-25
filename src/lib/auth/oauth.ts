@@ -21,6 +21,7 @@ export function createOAuthState(secret: string, now = Date.now()): string {
 }
 export function verifyOAuthState(state: string, secret: string, now = Date.now()): OAuthState | null {
   requireSecret(secret);
+  if (state.length > 2048) return null;
   const parts = state.split(".");
   if (parts.length !== 2 || !secureEqual(mac(parts[0], secret), parts[1])) return null;
   try {
