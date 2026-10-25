@@ -8,6 +8,7 @@ import "./repositories.css";
 
 type Options = { defaultRef: string; refs: string[]; workflows: Workflow[] };
 type Saved = { repository_id: string; full_name: string; default_ref: string; workflow_id: string; workflow_path: string; enabled: boolean; access_status: string };
+type GrantInstallation = { installationId: number; account: string; repositories: (Repository & { granted: boolean })[] };
 type Audit = { id: string; actor: string; action: string; created_at: string; repository_id: string | null };
 
 export default function RepositoriesPage() {
@@ -24,6 +25,8 @@ export default function RepositoriesPage() {
   const [enabled, setEnabled] = useState(false);
   const [saved, setSaved] = useState<Saved[]>([]);
   const [audit, setAudit] = useState<Audit[]>([]);
+  const [grantInstallations, setGrantInstallations] = useState<GrantInstallation[] | null>(null);
+  const [grantBusy, setGrantBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -43,6 +46,27 @@ export default function RepositoriesPage() {
     setBusy(true); setError(""); setMessage("");
     try { await work(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Request failed"); }
     finally { setBusy(false); }
+  }
+
+  async function loadGrants() {
+    setGrantBusy(true); setError("");
+    try {
+      const data = await api<GrantInstallation[]>("grants");
+      setGrantInstallations(data);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load repository access"); }
+    finally { setGrantBusy(false); }
+  }
+
+  async function grantRepository(targetInstallationId: number, repositoryId: number) {
+    const selectedInstallationId = installationId;
+    setGrantBusy(true); setError(""); setMessage("");
+    try {
+      await api("grants", { installationId: targetInstallationId, repositoryId });
+      setMessage("Repository access granted. Select the installation again to refresh its repository list.");
+      await loadGrants();
+      if (String(targetInstallationId) === selectedInstallationId) await loadInstallation(String(targetInstallationId));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to grant repository access"); }
+    finally { setGrantBusy(false); }
   }
 
   async function login(event: FormEvent) {
@@ -108,6 +132,21 @@ export default function RepositoriesPage() {
       <p className="muted">The server must have a GitHub App and an approved installation allowlist configured. Individual user roles arrive in ORB-14.</p>
     </section> : <>
       <button className="secondary" disabled={busy} onClick={() => { setAuthorization(""); setInstallations([]); setInstallationId(""); setRepositoryId(""); setRepositories([]); setSaved([]); setAudit([]); setOptions(null); setMessage(""); setError(""); }}>Disconnect</button>
+      <section className="panel">
+        <h2>Repository access (administrators)</h2>
+        <p>Grant your ORBIT account access to repositories already approved by the GitHub App. This does not change GitHub installation permissions.</p>
+        <button className="secondary" type="button" disabled={grantBusy} onClick={() => void loadGrants()}>Manage repository access</button>
+        {grantInstallations?.map(group => <div key={group.installationId}>
+          <h3>{group.account} · {group.installationId}</h3>
+          <div className="table-wrap"><table><thead><tr><th>Repository</th><th>Access</th><th>Action</th></tr></thead><tbody>
+            {group.repositories.map(repo => <tr key={repo.id}><td>{repo.full_name}</td><td>{repo.granted ? "Granted" : "Not granted"}</td><td>
+              <button type="button" disabled={grantBusy || repo.granted || repo.archived} onClick={() => void grantRepository(group.installationId, repo.id)}>
+                {repo.granted ? "Granted" : repo.archived ? "Archived" : "Grant access"}
+              </button>
+            </td></tr>)}
+          </tbody></table></div>
+        </div>)}
+      </section>
       <section className="panel"><h2>Repository configuration</h2>
         {!installations.length && <p>No approved active installations found. Check the server allowlist and GitHub App installation.</p>}
         <form onSubmit={save}><fieldset disabled={busy}>
