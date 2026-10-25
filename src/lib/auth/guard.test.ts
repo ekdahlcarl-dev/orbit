@@ -28,7 +28,7 @@ test("origin guard allows only exact public origin in production", () => {
   try {
     setEnv(publicOrigin, "true", "production");
     assert.doesNotThrow(() => check(publicOrigin));
-    for (const origin of ["http://localhost:3001", "https://evil.example", "null"]) {
+    for (const origin of ["http://localhost:3001", "https://localhost:3001", "https://evil.example", "null"]) {
       assert.throws(() => check(origin), { status: 403 });
     }
     assert.throws(() => check(), { status: 403 });
@@ -38,12 +38,14 @@ test("Codespaces proxy exception is limited to development and port 3001", () =>
   try {
     setEnv(publicOrigin, "true", "development");
     assert.doesNotThrow(() => check("http://localhost:3001"));
+    assert.doesNotThrow(() => check("https://localhost:3001"));
     assert.doesNotThrow(() => check(publicOrigin));
-    for (const origin of ["http://localhost:3002", "http://127.0.0.1:3001", "https://evil.example"]) {
+    for (const origin of ["http://localhost:3002", "https://localhost:3002", "http://127.0.0.1:3001", "https://evil.example"]) {
       assert.throws(() => check(origin), { status: 403 });
     }
     setEnv(publicOrigin, undefined, "development");
     assert.throws(() => check("http://localhost:3001"), { status: 403 });
+    assert.throws(() => check("https://localhost:3001"), { status: 403 });
     setEnv("https://orbit.example", "true", "development");
     assert.throws(() => check("http://localhost:3001"), { status: 403 });
     setEnv(undefined, "true", "development");
