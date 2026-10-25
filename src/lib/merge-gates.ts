@@ -63,18 +63,30 @@ export async function refreshMergeGates(db: PoolClient, github = new GitHubClien
         for (const artifact of artifacts) {
           const confidence = await recalculateConfidence(db, Number(artifact.id));
           // Passing observations require immutable, matching source evidence, including L1.
-          const invalid = await db.query(`SELECT 1 FROM confidence_evidence_state c LEFT JOIN evidence e ON e.id=c.evidence_id
+          const invalid = await db.query(`SELECT 1 FROM confidence_evidence_state c
+            JOIN confidence_requirements r ON r.repository_id=$4 AND r.level=c.level AND r.key=c.key
+              AND r.enabled=true AND r.required=true
+            LEFT JOIN evidence e ON e.id=c.evidence_id
             WHERE c.artifact_id=$1 AND c.level<=$2 AND c.state='passed' AND
             (c.build_run_id<>$3 OR c.repository_id<>$4 OR c.observed_at>now() OR e.id IS NULL OR e.status<>'passed'
-             OR e.build_run_id<>$3 OR (e.artifact_id IS NOT NULL AND e.artifact_id<>$1))
-            UNION ALL SELECT 1 FROM static_analysis_results s LEFT JOIN evidence e ON e.id=s.evidence_id
-            WHERE s.build_run_id=$3 AND (s.commit_sha<>$5 OR s.repository_id<>$4 OR e.id IS NULL OR e.build_run_id<>$3 OR e.status<>'passed') LIMIT 1`,
-          [artifact.id, required, run.id, repositoryId, sha]);
-          const sources = await db.query(`SELECT s.id AS result_id,s.evidence_id,s.provider FROM static_analysis_results s
-            WHERE s.build_run_id=$1 ORDER BY s.id`, [run.id]);
+             OR e.build_run_id<>$3 OR (e.artifact_id IS NOT NULL AND e.artifact_id<>$1)) LIMIT 1`,
+          [artifact.id, required, run.id, repositoryId]);
+          // Select the same latest enabled, required provider results as getLevel1Assessment.
+          // Validate after selecting the latest row: an invalid retry must not fall back to older evidence.
+          const sources = await db.query(`SELECT s.id AS result_id,s.evidence_id,s.provider,
+              (s.commit_sha=$3 AND s.repository_id=$2 AND s.state='passed' AND s.quality_gate='passed'
+               AND e.id IS NOT NULL AND e.build_run_id=$1 AND e.status='passed') AS lineage_valid
+            FROM static_analysis_requirements r
+            JOIN LATERAL (
+              SELECT * FROM static_analysis_results WHERE build_run_id=$1 AND provider=r.provider
+              ORDER BY created_at DESC,id DESC LIMIT 1
+            ) s ON true
+            LEFT JOIN evidence e ON e.id=s.evidence_id
+            WHERE r.repository_id=$2 AND r.enabled=true AND r.required=true
+            ORDER BY s.provider`, [run.id, repositoryId, sha]);
           const states = [confidence.level_1_state, confidence.level_2_state, confidence.level_3_state] as ConfidenceState[];
           assessments.push({ artifactId: Number(artifact.id), digest: artifact.digest, buildRunId: Number(run.id), states,
-            passed: gatePasses(required, states, !invalid.rowCount), level1Sources: sources.rows, snapshot: confidence.snapshot });
+            passed: gatePasses(required, states, !invalid.rowCount && sources.rows.every(source => source.lineage_valid === true)), level1Sources: sources.rows, snapshot: confidence.snapshot });
         }
         const passed = run?.status === "succeeded" && assessments.length > 0 && assessments.every(a => a.passed);
         const snapshot = { branch, commitSha: sha, requiredLevel: required, passed: Boolean(passed), buildRunId: run ? Number(run.id) : null,
