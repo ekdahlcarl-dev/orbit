@@ -19,6 +19,14 @@ test("only passed system runs can pass Level 3 evidence", () => {
   for (const state of ["failed","timed_out","canceled","incomplete"] as const) assert.equal(toSystemConfidenceState(state), "failed");
 });
 
+test("provider configuration rejects inline credentials but allows environment references", () => {
+  const base = { repositoryId: 1, providerKey: "lab", adapterKey: "rest-v1" };
+  for (const config of [{ apiKey: "secret" }, { password: "secret" }, { endpoint: "https://user:password@lab.test" }, { endpoint: "https://lab.test?token=secret" }]) {
+    assert.equal(systemProviderSchema.safeParse({ ...base, config }).success, false);
+  }
+  assert.equal(systemProviderSchema.safeParse({ ...base, config: { apiKeyEnv: "LAB_API_KEY", endpoint: "https://lab.test" } }).success, true);
+});
+
 test("retry attempts and exact artifact identity are required by normalized run contract", () => {
   const run = systemRunSchema.parse({ artifactId: 9, providerKey: "hil", environmentKey: "rig-a", suiteKey: "regression", providerRunId: "abc", attempt: 2, state: "passed", observedAt: "2026-09-08T19:00:00Z" });
   assert.equal(run.artifactId, 9);

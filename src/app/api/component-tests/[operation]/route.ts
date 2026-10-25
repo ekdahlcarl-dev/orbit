@@ -1,3 +1,4 @@
+import { withAuditActor } from "@/lib/auth/audit";
 import { requireAccess, requireResourceAccess } from "@/lib/auth/rbac";
 import { requireSameOrigin } from "@/lib/auth/guard";
 import { getDb } from "@/lib/db";
@@ -11,15 +12,15 @@ type Context = { params: Promise<{ operation: string }> };
 
 export async function POST(request: Request, context: Context) {
   try {
-    await requireAccess(request, "read");
+    const { identity } = await requireAccess(request, "read");
     requireSameOrigin(request);
     const { operation } = await context.params;
     const body = JSON.parse((await readLimitedBody(request, 1_000_000)).toString("utf8"));
     if (operation === "configure") await requireAccess(request, "configuration_write", Number(body.repositoryId));
     else if (operation === "ingest") await requireResourceAccess(request, "configuration_write", "artifact", Number(body.artifactId));
     else return json({ error: "Not found" }, 404);
-    if (operation === "configure") return json(await configureComponentSuite(getDb(), body), 201);
-    if (operation === "ingest") return json(await ingestComponentSuite(getDb(), body), 201);
+    if (operation === "configure") return json(await withAuditActor(getDb(), identity, client => configureComponentSuite(client, body)), 201);
+    if (operation === "ingest") return json(await withAuditActor(getDb(), identity, client => ingestComponentSuite(client, body)), 201);
     return json({ error: "Not found" }, 404);
   } catch (error) {
     return errorResponse(error);

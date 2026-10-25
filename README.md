@@ -77,3 +77,7 @@ CI and the ORBIT-specific Codespaces configuration originally lived outside the 
 ## GitHub repository onboarding (ORB-3)
 
 Open `/repositories` to configure authorized GitHub repositories. See [GITHUB_SETUP.md](GITHUB_SETUP.md) for App permissions, server secrets, operator access, webhook setup and verification. Build dispatch and scheduling remain ORB-4.
+
+## Security and access control
+
+See [ORB-14 security review and runbook](docs/orb-14-security-review.md) for the role matrix, audit coverage, migration notes, secrets rotation, production database privileges, and manual release verification.

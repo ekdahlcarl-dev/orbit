@@ -4,6 +4,7 @@ import { OpenAiRecommendationProvider } from "@/lib/ai-provider";
 import { errorResponse, json } from "@/lib/github/http";
 import { requireAccess } from "@/lib/auth/rbac";
 import { requireSameOrigin } from "@/lib/auth/guard";
+import { readLimitedBody } from "@/lib/github/security";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -21,8 +22,7 @@ export async function POST(request: Request) {
   try {
     await requireAccess(request, "read");
     requireSameOrigin(request);
-    if (Number(request.headers.get("content-length")) > 8192) return json({ error: "Request too large" }, 413);
-    const parsed = schema.safeParse(await request.json());
+    const parsed = schema.safeParse(JSON.parse((await readLimitedBody(request, 8192)).toString("utf8")));
     if (!parsed.success) return json({ error: "Invalid assistant request", details: parsed.error.issues }, 400);
     const { repositoryId, artifactId, componentId, since, question } = parsed.data;
     await requireAccess(request, "read", repositoryId);

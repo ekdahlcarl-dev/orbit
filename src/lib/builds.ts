@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
+import { transaction } from "./github/store";
 import { GitHubClient } from "./github/client";
 import { IntegrationError, idSchema } from "./github/security";
 
@@ -11,13 +12,20 @@ type TriggerPayload = { repositoryId: number; installationId: number; triggerTyp
 
 export async function saveBuildSettings(db: Pool, github: GitHubClient, input: z.infer<typeof buildSettingsSchema>, actor: string) {
   const repository = (await github.repositories(input.installationId)).find(item => item.id === input.repositoryId); if (!repository) throw new IntegrationError(403, "Repository is not authorized for this installation");
-  const result = await db.query(`UPDATE github_repositories SET enabled=$3,event_builds=$4,schedule_interval_minutes=$5,next_scheduled_at=CASE WHEN $3 AND $5::integer IS NOT NULL THEN COALESCE(next_scheduled_at,now()+make_interval(mins=>$5::integer)) ELSE NULL END,updated_at=now() WHERE repository_id=$1 AND installation_id=$2 AND access_status='active' RETURNING *`, [input.repositoryId,input.installationId,input.enabled,input.eventBuilds,input.scheduleIntervalMinutes]);
-  if (!result.rowCount) throw new IntegrationError(404,"Repository configuration not found"); await db.query(`INSERT INTO github_audit(actor,action,installation_id,repository_id,after_value) VALUES ($1,'build.settings_updated',$2,$3,$4)`,[actor,input.installationId,input.repositoryId,result.rows[0]]); return result.rows[0];
+  return transaction(db, async client => {
+  const result = await client.query(`UPDATE github_repositories SET enabled=$3,event_builds=$4,schedule_interval_minutes=$5,next_scheduled_at=CASE WHEN $3 AND $5::integer IS NOT NULL THEN COALESCE(next_scheduled_at,now()+make_interval(mins=>$5::integer)) ELSE NULL END,updated_at=now() WHERE repository_id=$1 AND installation_id=$2 AND access_status='active' RETURNING *`, [input.repositoryId,input.installationId,input.enabled,input.eventBuilds,input.scheduleIntervalMinutes]);
+  if (!result.rowCount) throw new IntegrationError(404,"Repository configuration not found"); await client.query(`INSERT INTO github_audit(actor,action,installation_id,repository_id,after_value) VALUES ($1,'build.settings_updated',$2,$3,$4)`,[actor,input.installationId,input.repositoryId,result.rows[0]]); return result.rows[0];
+  });
 }
 export async function queueManualBuild(db: Pool, github: GitHubClient, input: z.infer<typeof manualBuildSchema>, actor: string) {
   const repository=(await github.repositories(input.installationId)).find(item=>item.id===input.repositoryId); if(!repository) throw new IntegrationError(403,"Repository is not authorized for this installation");
   const config=await db.query(`SELECT 1 FROM github_repositories WHERE repository_id=$1 AND installation_id=$2 AND enabled AND access_status='active'`,[input.repositoryId,input.installationId]); if(!config.rowCount) throw new IntegrationError(409,"Builds are disabled for this repository");
-  const payload:TriggerPayload={repositoryId:input.repositoryId,installationId:input.installationId,triggerType:"manual",triggerKey:`manual:${randomUUID()}`,requestedBy:actor}; await db.query("INSERT INTO job_queue(job_type,payload) VALUES ('build.trigger',$1)",[payload]); return {queued:true,triggerKey:payload.triggerKey};
+  const payload:TriggerPayload={repositoryId:input.repositoryId,installationId:input.installationId,triggerType:"manual",triggerKey:`manual:${randomUUID()}`,requestedBy:actor};
+  return transaction(db, async client => {
+    await client.query("INSERT INTO job_queue(job_type,payload) VALUES ('build.trigger',$1)",[payload]);
+    await client.query("INSERT INTO github_audit(actor,action,installation_id,repository_id,after_value) VALUES ($1,'build.requested',$2,$3,$4)",[actor,input.installationId,input.repositoryId,{triggerKey:payload.triggerKey}]);
+    return {queued:true,triggerKey:payload.triggerKey};
+  });
 }
 export async function listBuildRuns(db:Pool,installationId:number,repositoryIds:number[]){if(!repositoryIds.length)return[];return(await db.query(`SELECT id,repository_id,installation_id,workflow_id,trigger_type,ref,commit_sha,github_run_id,status,requested_by,requested_at,started_at,completed_at FROM build_runs WHERE installation_id=$1 AND repository_id=ANY($2::bigint[]) ORDER BY requested_at DESC LIMIT 200`,[installationId,repositoryIds])).rows;}
 export async function enqueueDueSchedules(client:PoolClient){const due=await client.query(`SELECT repository_id,installation_id,next_scheduled_at,schedule_interval_minutes FROM github_repositories WHERE enabled AND access_status='active' AND schedule_interval_minutes IS NOT NULL AND next_scheduled_at<=now() ORDER BY next_scheduled_at FOR UPDATE SKIP LOCKED LIMIT 20`);for(const row of due.rows){const triggerKey=`schedule:${row.repository_id}:${new Date(row.next_scheduled_at).toISOString()}`;const payload:TriggerPayload={repositoryId:Number(row.repository_id),installationId:Number(row.installation_id),triggerType:"schedule",triggerKey,requestedBy:"orbit.scheduler"};await client.query("INSERT INTO job_queue(job_type,payload) VALUES ('build.trigger',$1)",[payload]);await client.query(`UPDATE github_repositories SET next_scheduled_at=next_scheduled_at+make_interval(mins=>schedule_interval_minutes),updated_at=now() WHERE repository_id=$1`,[row.repository_id]);}}

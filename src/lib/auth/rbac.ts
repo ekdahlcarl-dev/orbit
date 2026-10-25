@@ -53,6 +53,7 @@ export async function repositoryForResource(db: Pick<Pool, "query">, resource: "
 }
 
 export async function requireResourceAccess(request: Request, action: OrbitAction, resource: "artifact" | "build" | "action", id: number) {
+  await requireAccess(request, "read");
   const repositoryId = await repositoryForResource(getDb(), resource, id);
   return requireAccess(request, action, repositoryId);
 }

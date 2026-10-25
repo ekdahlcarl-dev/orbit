@@ -19,6 +19,7 @@ test("PostgreSQL: config audit, rollback, webhook deduplication, queue and revoc
     await db.query(await readFile("db/migrations/002_github_onboarding.sql", "utf8"));
     await db.query(await readFile("db/migrations/003_build_orchestration.sql", "utf8"));
     await db.query(await readFile("db/migrations/004_artifact_evidence.sql", "utf8"));
+    await db.query(await readFile("db/migrations/015_webhook_fingerprints.sql", "utf8"));
     class StubGitHub extends GitHubClient {
       override async validate() { return { repository: { id: 5, name: "repo", full_name: "org/repo", default_branch: "main", archived: false }, workflow: { id: 7, name: "Build", path: ".github/workflows/build.yml", state: "active" }, refSha: "abc" }; }
     }
@@ -58,7 +59,7 @@ test("PostgreSQL: config audit, rollback, webhook deduplication, queue and revoc
     assert.equal((await db.query("SELECT * FROM github_audit WHERE action='repository.access_revoked'")).rowCount, 1);
     await assert.rejects(() => receiveWebhook(db, request("push", "unauthorized", { installation: { id: 10 }, repository: { id: 999 } }), env), /not onboarded/);
     await assert.rejects(() => receiveWebhook(db, request("installation", "wrong-installation", { installation: { id: 11 } }), env), /not authorized/);
-    assert.deepEqual(await receiveWebhook(db, request("ping", "setup-ping", { zen: "hello" }), env), { ping: true });
+    assert.deepEqual(await receiveWebhook(db, request("ping", "setup-ping", { zen: "hello", installation: { id: 10 } }), env), { ping: true });
     await assert.rejects(() => receiveWebhook(db, request("push", "revoked", { installation: { id: 10 }, repository: { id: 5 } }), env), /not onboarded/);
     await db.query("INSERT INTO job_queue(job_type,payload) VALUES ('github.webhook',$1)", [{ deliveryId: "missing" }]);
     for (let attempt = 0; attempt < 3; attempt++) {

@@ -24,3 +24,16 @@ test("session cookie parser rejects duplicates and malformed values", () => {
   assert.equal(parseCookie(`orbit_session=${token}%3B`, "orbit_session"), undefined);
   assert.equal(parseCookie(`orbit_session=${token}; other=${"X".repeat(8192)}`, "orbit_session"), undefined);
 });
+
+// OAuth cookies carry a signed state, not a 43-character session bearer token.
+test("OAuth cookie accepts issued signed state while rejecting duplicates and injection", async () => {
+  const { createOAuthState, verifyOAuthState } = await import("./oauth");
+  const secret = "test-only-oauth-secret-".repeat(3);
+  const state = createOAuthState(secret);
+  const cookie = parseCookie(`orbit_oauth_state=${state}`, "orbit_oauth_state");
+  assert.equal(cookie, state);
+  assert.ok(verifyOAuthState(cookie!, secret));
+  assert.equal(parseCookie(`orbit_oauth_state=${state}; orbit_oauth_state=${state}`, "orbit_oauth_state"), undefined);
+  assert.equal(parseCookie(`orbit_oauth_state=${state}%0A`, "orbit_oauth_state"), undefined);
+  assert.equal(parseCookie(`orbit_session=${state}`, "orbit_session"), undefined);
+});

@@ -1,3 +1,4 @@
+import { withAuditActor } from "@/lib/auth/audit";
 import { requireAccess, requireResourceAccess } from "@/lib/auth/rbac";
 import { requireSameOrigin } from "@/lib/auth/guard";
 import { getDb } from "@/lib/db";
@@ -11,7 +12,7 @@ type Context = { params: Promise<{ operation: string }> };
 
 export async function POST(request: Request, context: Context) {
   try {
-    await requireAccess(request, "read");
+    const { identity } = await requireAccess(request, "read");
     requireSameOrigin(request);
     const { operation } = await context.params;
     const body = JSON.parse((await readLimitedBody(request, 1_000_000)).toString("utf8"));
@@ -19,10 +20,10 @@ export async function POST(request: Request, context: Context) {
     else if (operation === "configure") await requireAccess(request, "configuration_write", Number(body.repositoryId));
     else if (operation === "runs") await requireResourceAccess(request, "configuration_write", "artifact", Number(body.artifactId));
     else return json({ error: "Not found" }, 404);
-    if (operation === "providers") return json(await registerSystemProvider(getDb(), body), 201);
-    if (operation === "environments") return json(await registerSystemEnvironment(getDb(), body), 201);
-    if (operation === "configure") return json(await configureSystemSuite(getDb(), body), 201);
-    if (operation === "runs") return json(await recordSystemTestRun(getDb(), body), 201);
+    if (operation === "providers") return json(await withAuditActor(getDb(), identity, client => registerSystemProvider(client, body)), 201);
+    if (operation === "environments") return json(await withAuditActor(getDb(), identity, client => registerSystemEnvironment(client, body)), 201);
+    if (operation === "configure") return json(await withAuditActor(getDb(), identity, client => configureSystemSuite(client, body)), 201);
+    if (operation === "runs") return json(await withAuditActor(getDb(), identity, client => recordSystemTestRun(client, body)), 201);
     return json({ error: "Not found" }, 404);
   } catch (error) {
     return errorResponse(error);
