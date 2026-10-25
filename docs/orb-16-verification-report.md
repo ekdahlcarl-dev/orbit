@@ -10,9 +10,9 @@ Both defects are addressed in this follow-up:
 - L2/L3 source validation now joins observations to enabled, required confidence requirements. Optional, disabled, and removed keys cannot veto the gate; required keys retain build/repository/artifact/source-status/future-time checks.
 - Two PostgreSQL regression tests cover failed L1 history followed by a passing retry (including timestamp ties), optional/disabled L1 providers, invalid latest required source, wrong latest SHA, optional/disabled/removed L2/L3 observations, re-enabled requirements, missing required evidence, mismatched artifact evidence, and future-dated required evidence. GitHub remains mocked and database fixtures are rolled back.
 
-Local verification: typecheck, lint, and production build PASS. The test suite registers 83 tests: 76 PASS, zero FAIL, seven PostgreSQL-dependent tests SKIPPED. The new database regressions have not run locally because database access remains blocked. Current-head CI validation is pending publication of this follow-up; no old CI result is being attributed to the fix.
+Local verification: typecheck, lint, and production build PASS. The test suite registers 83 tests: 76 PASS, zero FAIL, seven PostgreSQL-dependent tests SKIPPED. The new database regressions have not run locally because database access remains blocked. [CI run 106](https://github.com/ekdahlcarl-dev/orbit/actions/runs/40206486898) subsequently passed for fix commit `cac831033d099b64554142c02c9a863b7ec32519`: all 83 tests PASS, zero failures, zero skipped. Both new PostgreSQL regressions ran and passed. Migration application/replay, typecheck, lint, production build, dependency security, secret scanning, and devcontainer verification also passed. This evidence applies to the fix commit; the subsequent report-only update does not change application or test code.
 
-**Current recommendation: VERIFICATION INCOMPLETE.** D1/D2 code fixes await current-head PostgreSQL CI evidence; the live App/check/branch-protection tests remain blocked as documented below. PR #26 must remain open and unmerged.
+**Current recommendation: VERIFICATION INCOMPLETE.** D1/D2 are fixed and their PostgreSQL regressions pass in CI. The live App/check/branch-protection tests remain blocked as documented below. PR #26 must remain open and unmerged.
 
 ## Original verification baseline
 
