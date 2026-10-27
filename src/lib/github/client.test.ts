@@ -80,3 +80,23 @@ test("workflow dispatch explains when manual triggers are missing", async () => 
   await assert.rejects(() => github.dispatch(10, 5, 7, "heads/main"), error =>
     error instanceof Error && error.message.includes("does not support manual dispatch"));
 });
+
+test("merge gates publish exact-SHA checks and update the same check with a scoped token", async () => {
+  const writes: Array<{ method: string; path: string; body: Record<string, unknown> }> = [];
+  const github = new GitHubClient(mockTransport((url, init) => {
+    if (url.pathname.endsWith("access_tokens")) return { token: "secret-token" };
+    if (url.pathname === "/installation/repositories") return { repositories: [repo] };
+    if (url.pathname.includes("check-runs")) {
+      writes.push({ method: String(init?.method), path: url.pathname, body: JSON.parse(String(init?.body)) });
+      return { id: 77 };
+    }
+    return [];
+  }), env);
+  await github.publishMergeGate(10, 5, { name: "ORBIT", head_sha: "a".repeat(40), status: "completed", conclusion: "failure" });
+  await github.publishMergeGate(10, 5, { name: "ORBIT", status: "completed", conclusion: "success" }, 77);
+  assert.equal(writes[0].method, "POST");
+  assert.equal(writes[0].body.head_sha, "a".repeat(40));
+  assert.equal(writes[1].method, "PATCH");
+  assert.equal(writes[1].path, "/repos/org/repo/check-runs/77");
+  await assert.rejects(() => github.publishMergeGate(20, 5, {}), /not authorized/);
+});

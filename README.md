@@ -81,3 +81,7 @@ Open `/repositories` to configure authorized GitHub repositories. See [GITHUB_SE
 ## Security and access control
 
 See [ORB-14 security review and runbook](docs/orb-14-security-review.md) for the role matrix, audit coverage, migration notes, secrets rotation, production database privileges, and manual release verification.
+
+## GitHub confidence merge gates (ORB-16)
+
+Open `/merge-gates` to configure repository/target-branch confidence requirements and inspect decisions. See [setup, GitHub required-check configuration, and manual smoke tests](docs/orb-16-merge-gates.md).
