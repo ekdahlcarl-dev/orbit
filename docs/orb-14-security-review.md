@@ -1,5 +1,7 @@
 # ORB-14 security review and operating runbook
 
+ORB-19 adds a [telemetry data-protection contract](architecture/telemetry-contract-v1.md) and [receiver operating guidance](otel-runbook.md). It preserves this runbook's safe error serialization, secret handling and live role/repository-grant checks. The new telemetry architecture does not change authentication, permissions or audit behavior; application enforcement is assigned to ORB-20–26.
+
 Reviewed on 2026-10-25. This completion branch builds on PR #24 (merged at 10:49:56 UTC, merge commit `274c683fcd40d80210f83777df1988a2cc5342dc`). It is not authorization to merge or release.
 
 ## Acceptance evidence

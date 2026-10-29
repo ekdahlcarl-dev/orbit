@@ -10,6 +10,8 @@ This is the standalone [ekdahlcarl-dev/orbit](https://github.com/ekdahlcarl-dev/
 
 The solution architecture is maintained as documentation-as-code in [docs/architecture/solution-architecture.md](docs/architecture/solution-architecture.md). It describes ORBIT's system context, confidence model and gates, integrations, data and AI/RAG architecture, security, deployment, and architecture principles.
 
+ORB-19 defines the [OpenTelemetry architecture](docs/architecture/adr-010-opentelemetry.md), [v1 telemetry contract](docs/architecture/telemetry-contract-v1.md), and [receiver runbook and ORB-20–26 handoff](docs/otel-runbook.md). The [verification report](docs/orb-19-verification-report.md) distinguishes the synthetic receiver test from pending application instrumentation.
+
 ## Local development
 
 ```bash

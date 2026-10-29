@@ -160,6 +160,8 @@ Database, application, configuration, and architecture changes remain traceable 
 
 ## 17. Observability and auditability
 
+The accepted ORB-1 ADR-010 OpenTelemetry decision is refined in [ADR-010](adr-010-opentelemetry.md) and the [versioned telemetry contract](telemetry-contract-v1.md). Separate web/worker services correlate requests, queue attempts, external GitHub runs, evidence, confidence and gate publication using trusted context and domain IDs. GitHub callbacks may start separate traces; uncertain associations must be visible. Telemetry never establishes confidence or replaces audit. The [receiver runbook](../otel-runbook.md) defines local collection, conditional zero-cost production export, data protection and the ORB-20–26 implementation boundaries. This is a design; the current API-only tracer does not establish verified export.
+
 ORBIT should retain enough information to reconstruct why a confidence state, gate result, or recommendation existed at a point in time.
 
 Important audit relationships include repository, commit, build, workflow execution, test result, evidence, confidence state, gate result, recommendation, recommendation evidence, human decision, test action, and test outcome.
