@@ -1,0 +1,81 @@
+{
+  "contract": "orbit.telemetry/1.0.0",
+  "phase": "ORB-21 and ORB-26 received-signal enforcement; not implemented by ORB-19",
+  "markers": [
+    {
+      "marker": "ORB19_SECRET_TOKEN_7f31",
+      "inputs": [
+        "headers.authorization",
+        "cookie",
+        "nested cause.message",
+        "environment secret"
+      ]
+    },
+    {
+      "marker": "ORB19_SECRET_SQL_7f31",
+      "inputs": [
+        "db.statement",
+        "SQL parameters",
+        "URL query"
+      ]
+    },
+    {
+      "marker": "ORB19_SECRET_BODY_7f31",
+      "inputs": [
+        "request body",
+        "webhook payload",
+        "report body",
+        "private source"
+      ]
+    },
+    {
+      "marker": "ORB19_SECRET_AI_7f31",
+      "inputs": [
+        "prompt",
+        "response",
+        "embeddings",
+        "tool arguments"
+      ]
+    }
+  ],
+  "assertions": {
+    "negative_control": "Each marker must be observed in test input before export",
+    "received_traces_logs_metrics_stdout": "No marker substring and no prohibited key",
+    "metric_attribute_deny": [
+      "repository_id",
+      "build_run_id",
+      "job_id",
+      "github_run_id",
+      "trace_id",
+      "span_id",
+      "error_id",
+      "operation_id",
+      "sha",
+      "digest"
+    ],
+    "loki_index_label_deny": [
+      "trace_id",
+      "span_id",
+      "error_id",
+      "operation_id",
+      "repository_id",
+      "job_id",
+      "build_run_id",
+      "github_run_id"
+    ],
+    "max_active_metric_series": 1000,
+    "max_log_bytes": 8192,
+    "max_span_bytes": 16384,
+    "max_export_bytes": 262144
+  },
+  "negative_cases": [
+    "unknown attribute key",
+    "string beyond 256 UTF-8 bytes",
+    "absolute or traversal source path",
+    "all-zero traceparent",
+    "caller supplied error_id",
+    "missing grant",
+    "revoked grant",
+    "unauthorized trace containing second repository"
+  ]
+}
